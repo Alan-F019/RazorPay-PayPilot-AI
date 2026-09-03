@@ -254,6 +254,61 @@ async function runSuite() {
     assert.strictEqual(fail2.updatedCase?.status, 'escalated');
   });
 
+  console.log('\n--- 6. Testing Attempt 2 Lifecycle State & Recovery ---');
+  const payAttempt2Id = `pay_att2_${Date.now()}`;
+  const resAttempt2 = (await WebhookService.processEvent({
+    event: 'payment.failed',
+    payload: {
+      payment: {
+        entity: {
+          id: payAttempt2Id,
+          amount: 300000, // ₹3,000
+          email: 'att2.user@corp.in',
+          error_code: 'INSUFFICIENT',
+          error_description: 'Card issuer reported insufficient funds',
+        },
+      },
+    },
+  } as any)) as any;
+  const caseAttempt2Id = resAttempt2.caseId;
+
+  await test('Attempt 2 remains in_progress (Awaiting Payment) and is NOT escalated', () => {
+    // Dispatch Attempt 1
+    const exec1 = RecoveryService.executeAction(caseAttempt2Id, 'Create Payment Link', false);
+    assert.strictEqual(exec1.status, 'in_progress');
+    assert.strictEqual(exec1.attemptNumber, 1);
+
+    // Dispatch Attempt 2
+    const exec2 = RecoveryService.executeAction(caseAttempt2Id, 'Create Payment Link', false);
+    assert.strictEqual(exec2.status, 'in_progress');
+    assert.strictEqual(exec2.attemptNumber, 2);
+
+    const caseItem = RecoveryService.getById(caseAttempt2Id);
+    assert.strictEqual(caseItem?.retryAttempts, 2, 'retryAttempts must be exactly 2');
+    assert.strictEqual(caseItem?.status, 'in_progress', 'status must remain in_progress');
+    assert.notStrictEqual(caseItem?.status, 'escalated', 'Case must NOT be escalated while awaiting payment on Attempt 2');
+  });
+
+  await test('Attempt 2 case successfully recovers when customer completes payment', async () => {
+    await WebhookService.processEvent({
+      event: 'payment.captured',
+      payload: {
+        payment: {
+          entity: {
+            id: payAttempt2Id,
+            amount: 300000,
+            email: 'att2.user@corp.in',
+          },
+        },
+      },
+    } as any);
+
+    const recoveredCase = RecoveryService.getById(caseAttempt2Id);
+    assert.strictEqual(recoveredCase?.status, 'recovered', 'Status must be recovered');
+    assert.strictEqual(recoveredCase?.recoveredAmount, 3000, 'Recovered amount must be ₹3,000');
+    assert.strictEqual(recoveredCase?.retryAttempts, 2, 'Retry attempt count preserved at 2');
+  });
+
   console.log(`
   ======================================================
   🏁 Recovery & Outcome Suite: ${passedTests}/${totalTests} Passed (100%)
@@ -265,3 +320,4 @@ runSuite().catch((e) => {
   console.error('Test Suite Failed:', e);
   process.exit(1);
 });
+

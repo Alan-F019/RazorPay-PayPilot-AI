@@ -436,3 +436,23 @@ export function loadRazorpayScript(): Promise<boolean> {
   });
 }
 
+/**
+ * 18. Trigger Razorpay Live Payment Sync
+ * Backend Endpoint: POST /api/razorpay/sync
+ */
+export async function syncRazorpayLivePayments(): Promise<{
+  success: boolean;
+  count: number;
+  inserted: number;
+  updated: number;
+  skipped: number;
+  recoveryCreated: number;
+  recoveryResolved: number;
+}> {
+  return await apiRequest<any>('/razorpay/sync', {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+}
+
+

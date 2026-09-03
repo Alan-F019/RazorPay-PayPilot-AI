@@ -79,7 +79,7 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
     'Payment failed during checkout';
 
   const attemptsCount = caseItem.retryAttempts || 0;
-  const isMaxAttempts = attemptsCount >= 2;
+  const isMaxAttempts = isEscalated || (attemptsCount >= 2 && !isInProgress);
   const guardrailStatus =
     caseItem.guardrail?.status ||
     (caseItem.amount > 25000 ? 'MANUAL_APPROVAL_REQUIRED' : isMaxAttempts ? 'BLOCKED' : 'ALLOWED');
@@ -307,7 +307,11 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
               Recovery Lifecycle State
             </span>
             <span className="font-mono text-[11px] text-blue-400 font-medium">
-              {isMaxAttempts ? 'Max Retries Reached (2/2)' : `Attempt ${attemptsCount} of 2`}
+              {isEscalated
+                ? 'Max Retries Reached (2/2)'
+                : isInProgress
+                ? `Attempt ${attemptsCount || 1} of 2 (Awaiting Payment)`
+                : `Attempt ${attemptsCount} of 2`}
             </span>
           </div>
 
@@ -338,8 +342,6 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
                   ? 'bg-blue-600 text-white font-bold border-blue-400 animate-pulse'
                   : isAlreadyRecovered
                   ? 'bg-blue-500/15 text-blue-300 border-blue-500/40'
-                  : isEscalated
-                  ? 'bg-purple-500/15 text-purple-300 border-purple-500/40'
                   : 'bg-[#0f172a] text-slate-500 border-[#1e293b]'
               }`}
             >
@@ -409,7 +411,11 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
           <div>
             <span className="text-slate-500 block text-[11px] font-medium">Attempt Counter</span>
             <span className="text-sm font-bold font-mono text-slate-200 mt-1 block">
-              {isMaxAttempts ? '2/2 (Max Reached)' : `${attemptsCount}/2`}
+              {isEscalated
+                ? '2/2 (Max Reached)'
+                : isInProgress
+                ? `${attemptsCount || 1}/2 (Awaiting Payment)`
+                : `${attemptsCount}/2`}
             </span>
           </div>
         </div>
@@ -449,6 +455,19 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
             </div>
             <span className="text-[11px] font-mono text-slate-400">
               Model: Explainable Reasoner v4.0
+            </span>
+          </div>
+
+          {/* Prominent Multi-Signal Tag Strip */}
+          <div className="mt-3 flex flex-wrap items-center gap-1.5 text-[11px] font-mono">
+            <span className="px-2 py-0.5 rounded bg-blue-500/10 text-blue-300 border border-blue-500/25 font-semibold">
+              Score: {formatConfidence(caseItem.aiProbability)}
+            </span>
+            <span className="px-2 py-0.5 rounded bg-[#1e293b] text-slate-300 border border-[#334155]">
+              Signals: {caseItem.customerTier || 'Standard'} Tier • {caseItem.customerHealthScore || 'Healthy'} • {caseItem.declineCode || failureCat}
+            </span>
+            <span className="px-2 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/25">
+              Strategy: {caseItem.strategy || caseItem.recommendedAction}
             </span>
           </div>
 

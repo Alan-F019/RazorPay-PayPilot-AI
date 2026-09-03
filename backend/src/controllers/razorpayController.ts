@@ -6,6 +6,30 @@ import { config } from '../config/env';
 
 export class RazorpayController {
   /**
+   * POST /api/razorpay/sync
+   * Pull live payments from Razorpay Test Mode API and sync into SQLite
+   */
+  public static async sync(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { payments } = req.body || {};
+      const syncResult = await RazorpayService.syncLivePayments(payments);
+
+      res.status(200).json({
+        success: true,
+        ...syncResult,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      console.error('[RazorpayController] Sync error:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Payment synchronization error',
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }
+
+  /**
    * GET /api/razorpay/config
    * Returns safe public configuration for frontend Razorpay checkout modal
    */

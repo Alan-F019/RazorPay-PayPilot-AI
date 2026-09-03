@@ -22,6 +22,7 @@ import {
   executeRecoveryAction,
   escalateRecoveryCase,
   resolveRecoveryCase,
+  syncRazorpayLivePayments,
 } from './services/recoveryService';
 
 // Layout & Views
@@ -171,6 +172,14 @@ export default function App() {
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
+      // 1. Proactive live payment synchronization with Razorpay API
+      try {
+        await syncRazorpayLivePayments();
+      } catch (syncErr) {
+        console.warn('[App] Live sync note:', syncErr);
+      }
+
+      // 2. Refresh application state from database
       const [refreshedCases, refreshedMetrics, refreshedTrajectory] = await Promise.all([
         fetchRecoveryCases(),
         fetchDashboardMetrics(dateRange),
@@ -181,7 +190,7 @@ export default function App() {
       setChartData(refreshedTrajectory);
       showToast(
         'Data Refreshed',
-        'Synced latest Razorpay webhook events and settlement batches.',
+        'Synced live Razorpay Test Mode transactions & recovery queue',
         'info'
       );
     } catch (err) {

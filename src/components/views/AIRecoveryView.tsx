@@ -229,6 +229,19 @@ export const AIRecoveryView: React.FC<AIRecoveryViewProps> = ({
                   </div>
                 </div>
 
+                {/* AI Multi-Signal Summary Tag Strip */}
+                <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-mono">
+                  <span className="px-2 py-0.5 rounded bg-blue-500/10 text-blue-300 border border-blue-500/25 font-semibold">
+                    Score: {formatConfidence(c.aiProbability)}
+                  </span>
+                  <span className="px-2 py-0.5 rounded bg-[#131b2e] text-slate-300 border border-[#1e293b]">
+                    Signals: {c.customerTier || 'Standard'} Tier • {c.customerHealthScore || 'Healthy'} • {c.declineCode || normalizeFailureCategory(c)}
+                  </span>
+                  <span className="px-2 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/20">
+                    Strategy: {c.strategy || c.recommendedAction}
+                  </span>
+                </div>
+
                 {/* AI Analysis Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs bg-[#0f172a] p-3.5 rounded border border-[#1e293b]">
                   <div>

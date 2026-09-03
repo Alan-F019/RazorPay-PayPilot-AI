@@ -378,9 +378,41 @@ export class WebhookService {
         });
       }
     } else {
+      // Standalone captured payment: lookup/create customer and persist transaction without recovery_event
+      const email = payment.email || 'customer@example.com';
+      const phone = payment.contact || '+91 98765 43210';
+      let customer = db.prepare('SELECT id, name, email FROM customers WHERE email = ?').get(email) as any;
+      if (!customer) {
+        const custId = `CUST-${Math.floor(1000 + Math.random() * 9000)}`;
+        const name = email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase());
+        db.prepare(`
+          INSERT INTO customers (id, name, email, phone, business_type, tier, health_score, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(custId, name, email, phone, 'Merchant Account', 'Standard', 'Healthy', nowIso);
+        customer = { id: custId, name, email };
+      }
+
+      const txnId = `txn_${paymentId.toLowerCase()}`;
+      db.prepare(`
+        INSERT INTO transactions (
+          id, customer_id, amount, currency, status, payment_method,
+          razorpay_payment_id, razorpay_order_id, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        txnId,
+        customer.id,
+        amountInINR,
+        payment.currency || 'INR',
+        'captured',
+        payment.method || 'card',
+        paymentId,
+        orderId || null,
+        nowIso
+      );
+
       this.recordAuditLog({
         caseId: 'SYSTEM',
-        customerName: 'Razorpay Gateway',
+        customerName: customer.name || 'Razorpay Gateway',
         action: 'Payment captured',
         amount: amountInINR,
         trigger: payload.event,
@@ -478,7 +510,7 @@ export class WebhookService {
     blockedReason?: string;
   }) {
     const db = getDatabase();
-    const auditId = `AUD-${Math.floor(10000 + Math.random() * 90000)}`;
+    const auditId = `AUD-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
     const timestamp = new Date().toLocaleTimeString('en-US', { hour12: false });
 
     db.prepare(`

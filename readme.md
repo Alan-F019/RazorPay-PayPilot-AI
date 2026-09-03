@@ -1,34 +1,53 @@
 # PayPilot AI — Autonomous Revenue Recovery for Razorpay
 
-> AI-powered agentic commerce platform for smarter payment workflows and autonomous revenue recovery.
+> Autonomous agentic revenue recovery platform that detects failed checkouts, formulates explainable recovery decisions, and recovers lost revenue within enterprise merchant guardrails.
+
+---
 
 ## 🏗️ Architecture
 
 ```text
-React 19 + Vite + TailwindCSS
+React 19 + Vite + TailwindCSS 4
             │
             ▼
      Express REST API ◄── Razorpay Webhooks (HMAC-SHA256)
             │
-            ▼
- Node.js + TypeScript Backend ──► Razorpay Test API
+            ├──► Razorpay Test Mode API Sync (client.payments.all)
             │
             ▼
-      SQLite Database (paypilot.db)
+    Node.js + TypeScript Backend (AI Multi-Signal Decision Engine)
+            │
+            ▼
+      SQLite Database (paypilot.db: WAL mode + Foreign Keys)
 ```
+
+---
 
 ## 🛠️ Tech Stack
 
 * **Frontend:** React 19, Vite 6, TailwindCSS 4, Lucide Icons, Motion
-* **Backend:** Node.js, Express 4, TypeScript, tsx, Razorpay Node SDK
+* **Backend:** Node.js, Express 4, TypeScript 5.8, tsx, Official Razorpay Node SDK
 * **Database:** SQLite (WAL mode, Foreign Keys, Persistent Webhook Idempotency)
-* **Tooling:** TypeScript 5.8, Concurrently, Dotenv
+* **Tooling:** TypeScript, Concurrently, Dotenv
+
+---
+
+## 🧠 AI Decision Engine Architecture
+
+PayPilot AI utilizes a **deterministic, explainable, multi-signal decision model** rather than an ungrounded black-box LLM. 
+
+When a payment fails, Razorpay provides the ground-truth transaction and decline telemetry. PayPilot AI synthesizes these signals to calculate recovery probability and recommend tailored dunning workflows:
+
+1. **Failure Category Classification**: Normalizes gateway decline codes (`INSUFFICIENT_FUNDS`, `ONLINE_LIMIT_EXCEEDED`, `GATEWAY_DECLINE_POLICY`, `EXPIRED_CARD`, `TIMEOUT`, `AUTHENTICATION_FAILED`).
+2. **Customer Reliability Signals**: Factors in customer account tier (`Enterprise`, `Growth`, `Standard`), health score (`Healthy`, `Needs Attention`, `High Risk`), and historical recovery yield.
+3. **Attempt & Fatigue Penalties**: Dynamically penalizes probability on repeat attempts to avoid customer notification fatigue.
+4. **Guardrail Governance**: Automatically enforces amount thresholds (₹25,000 ceiling requiring manual merchant authorization) and a 2-attempt circuit breaker before assigning cases to operations.
 
 ---
 
 ## 🚀 Quick Start
 
-### Install
+### 1. Install Dependencies
 
 ```bash
 git clone <repository-url>
@@ -36,7 +55,7 @@ cd razorpay-PayPilot-AI
 npm install
 ```
 
-### Configure Environment
+### 2. Configure Environment
 
 Create `.env` from `.env.example`:
 
@@ -53,13 +72,13 @@ RAZORPAY_KEY_SECRET=rzp_test_placeholder_secret
 RAZORPAY_WEBHOOK_SECRET=paypilot_webhook_secret_test
 ```
 
-### Seed Demo Data
+### 3. Seed Deterministic Baseline Data
 
 ```bash
 npm run seed
 ```
 
-### Run Application
+### 4. Run Application
 
 ```bash
 npm run dev
@@ -70,112 +89,88 @@ npm run dev
 
 ---
 
-## 💳 Razorpay Test Mode Integration
+## 💳 Razorpay Test Mode & Webhook Integration
 
 > [!NOTE]
 > This integration runs strictly in **Razorpay Test / Sandbox Mode**. No production credentials or real money movement are involved.
 
-### 1. Test Mode Endpoints
+### 1. Proactive Live Payment Sync (`POST /api/razorpay/sync`)
 
-| Method | Endpoint | Description | Sample Body / Params |
-|---|---|---|---|
-| `POST` | `/api/razorpay/orders` | Create Razorpay test order | `{ "amount": 50000, "currency": "INR", "receipt": "rcpt_01" }` |
-| `GET` | `/api/razorpay/orders/:orderId` | Fetch Razorpay order details | Path parameter `orderId` |
-| `GET` | `/api/razorpay/payments/:paymentId` | Fetch Razorpay payment details | Path parameter `paymentId` |
-| `POST` | `/api/webhooks/razorpay` | Inbound webhook ingestion | Headers: `x-razorpay-signature` |
+In addition to event-driven webhooks, PayPilot AI actively synchronizes payments directly from the Razorpay Test Mode API via `client.payments.all()`:
+* **Deterministic Deduplication**: Maps payments to `id = txn_${payment.id.toLowerCase()}` to prevent duplicate transactions across repeated syncs and webhooks.
+* **State Evolution**: If an active failed transaction transitions to `captured`, the sync resolves the linked recovery event (`status = 'recovered'`, `recovered_amount = payment.amount / 100`).
+* **Standalone Success Isolation**: Directly successful payments persist into `transactions` without creating extraneous recovery cases.
 
-### 2. Supported Webhook Events
+### 2. Webhook Ingestion & Signature Verification
 
-* `payment.failed`: Automatically creates/updates `Transaction`, generates a new `RecoveryEvent` with AI dunning strategy and dynamic 1-click payment link, and records an `AuditLog`.
-* `payment.captured` / `payment.authorized`: Updates `Transaction.status = 'captured'`, resolves any active associated `RecoveryEvent` to `'recovered'`, and records an `AuditLog`.
-* `order.paid`: Confirms order settlement and updates related records.
-
-### 3. Webhook Signature Verification
-
-All webhook requests to `/api/webhooks/razorpay` are verified using HMAC-SHA256 calculated over the **exact raw request body bytes**:
+All inbound webhooks to `/api/webhooks/razorpay` are verified using HMAC-SHA256 calculated over the exact raw request bytes:
 
 $$\text{Signature} = \text{HMAC-SHA256}(\text{rawBodyBuffer}, \text{RAZORPAY\_WEBHOOK\_SECRET})$$
 
-Requests with missing or invalid `x-razorpay-signature` headers are rejected with **HTTP 400 Bad Request** and an audit log is recorded.
+* **`payment.failed`**: Ingests decline data, evaluates AI strategy, and opens an active Recovery Case.
+* **`payment.captured` / `order.paid`**: Settle transactions and mark linked recovery cases as recovered.
+* **Persistent Idempotency**: Tracked via the SQLite `webhook_events` table (`event_id UNIQUE`).
 
-### 4. Webhook Idempotency
+### 3. 🧪 Interactive Test Payment Playground
 
-Duplicate deliveries from Razorpay are persistently tracked in SQLite (`webhook_events` table with unique constraint on `event_id`). Re-delivered events are acknowledged and safely skipped without creating duplicate transactions, recovery cases, or audit logs.
+Accessible directly from the top Header and Sidebar, the Playground offers two distinct execution modes:
 
-### 5. 🧪 Interactive Test Payment Playground
-
-PayPilot AI includes a built-in interactive **Razorpay Test Payment Playground** accessible directly from the top Header and Sidebar.
-
-It supports:
-* **Interactive Amounts**: Quick preset chips (`₹100`, `₹500`, `₹1,000`, `₹5,000`, `₹10,000`, `₹50,000`) and custom amounts.
-* **Two Operating Modes**:
-  1. **Live Razorpay Test Checkout**: Launches the genuine Razorpay Standard Checkout SDK modal (`checkout.js`) with sandbox payment options.
-  2. **PayPilot Test Simulation (Outcome Simulator)**: Securely triggers backend-generated, HMAC-SHA256 verified webhook events (`payment.failed` with various decline reasons or `payment.captured`) without exposing any secrets to the client.
-* **Instant Feedback & Case Navigation**: Live Order ID, Payment ID, and a direct clickable **`[ View Recovery Case ]`** button to immediately inspect the resulting recovery case and AI strategy in the drawer.
-
-### 6. Automated Local Webhook Test Suite
-
-Run the comprehensive integration test suite simulating signed webhooks, duplicate delivery, invalid signatures, order creation, and recovery workflows:
-
-```bash
-npm run test:webhook
-```
+* **`SIMULATED WEBHOOK ENGINE`**: Deterministic backend-generated, HMAC-signed webhook simulation. Ideal for testing AI diagnosis, guardrail blocks, and recovery outcomes instantly without launching a browser checkout modal.
+* **`LIVE RAZORPAY TEST MODE`**: Launches the official Razorpay Standard Checkout SDK popup (`checkout.js`) against your active sandbox test keys. Real test transactions can subsequently be refreshed into the dashboard via live API sync.
 
 ---
 
 ## 🔌 API Reference
 
 | Method | Endpoint | Purpose |
-| ------ | ----------------------------------------- | -------------------------- |
-| GET    | `/api/health` | Service health status |
-| GET    | `/api/dashboard/summary` | Revenue & recovery metrics |
-| GET    | `/api/dashboard/trajectory` | Revenue trajectory chart series |
-| GET    | `/api/dashboard/causes` | Failure causes breakdown |
-| GET    | `/api/transactions` | Paginated transaction listing |
-| GET    | `/api/transactions/:id` | Transaction details with joined recovery |
-| GET    | `/api/recovery-events` | Active recovery pipeline cases |
-| GET    | `/api/recovery-events/:id` | Single recovery case details |
-| POST   | `/api/recovery-events/:id/execute-action` | Trigger 1-click recovery / retry |
-| POST   | `/api/recovery-events/:id/escalate` | Escalate case to ops queue |
-| POST   | `/api/recovery-events/:id/resolve` | Mark case resolved manually |
-| GET    | `/api/customers` | Customer accounts & yields |
-| GET    | `/api/customers/:id` | Customer profile & lifetime stats |
-| GET    | `/api/audit-logs` | Immutable audit log trail |
-| GET    | `/api/guardrails` | Active merchant guardrails |
-| POST   | `/api/razorpay/orders` | Create Razorpay test order |
-| GET    | `/api/razorpay/orders/:orderId` | Fetch Razorpay order |
-| GET    | `/api/razorpay/payments/:paymentId` | Fetch Razorpay payment |
-| POST   | `/api/webhooks/razorpay` | Razorpay webhook receiver |
+| ------ | ----------------------------------------- | ---------------------------------------------------- |
+| GET    | `/api/health`                             | Service health status |
+| GET    | `/api/dashboard/summary`                  | Revenue & recovery metrics (Live DB queries) |
+| GET    | `/api/dashboard/trajectory`               | Revenue trajectory chart velocity series |
+| GET    | `/api/dashboard/causes`                   | Failure causes breakdown |
+| GET    | `/api/transactions`                       | Paginated transaction listing |
+| GET    | `/api/transactions/:id`                   | Transaction details with joined recovery data |
+| GET    | `/api/recovery-events`                    | Active recovery pipeline cases |
+| GET    | `/api/recovery-events/:id`                | Single recovery case details & timeline |
+| POST   | `/api/recovery-events/:id/execute-action` | Dispatch 1-click recovery action / retry |
+| POST   | `/api/recovery-events/:id/escalate`       | Escalate case to merchant operations queue |
+| POST   | `/api/recovery-events/:id/resolve`        | Mark case resolved manually |
+| GET    | `/api/customers`                          | Customer accounts & recovery yields |
+| GET    | `/api/customers/:id`                      | Customer profile & lifetime statistics |
+| GET    | `/api/audit-logs`                         | Immutable governance & policy audit trail |
+| GET    | `/api/guardrails`                         | Active merchant guardrail configurations |
+| POST   | `/api/razorpay/sync`                      | Proactively pull & sync live payments from Razorpay |
+| POST   | `/api/razorpay/orders`                    | Create Razorpay test order |
+| GET    | `/api/razorpay/orders/:orderId`           | Fetch Razorpay order from API |
+| GET    | `/api/razorpay/payments/:paymentId`       | Fetch Razorpay payment from API |
+| POST   | `/api/razorpay/simulate-webhook`          | Trigger signed webhook simulation |
+| POST   | `/api/webhooks/razorpay`                  | Razorpay inbound webhook receiver |
 
 ---
 
-## 🗄️ Relational Data Model
+## 🧪 Verification & Automated Testing
 
-```text
-Customer
-   │
-   ├── Transactions (FK: customer_id)
-   │       │
-   │       └── Recovery Events (FK: transaction_id, customer_id)
-   │               │
-   │               └── Audit Logs
-   │
-Webhook Events (Persistent Idempotency: event_id UNIQUE)
-```
+PayPilot AI includes a comprehensive automated test suite with **55/55 assertions passing (100%)**:
 
----
+| Test Suite | Assertions | Focus Areas |
+|---|---:|---|
+| **AI Decision Engine Suite** | 10/10 | Multi-signal probability scoring, failure classification, enterprise priority, ₹25k cap, 2-attempt limit, settled case lock. |
+| **Recovery Outcome Engine Suite** | 11/11 | Attempt state progression, Attempt 2 in-progress & recovery isolation, manual authorization override, settlement resolution, failed retry escalation. |
+| **Razorpay Webhook & Test Mode Suite**| 15/15 | Order creation, HMAC-SHA256 signature verification, duplicate webhook idempotency, invalid signature rejection. |
+| **Live Payment Sync Suite** | 19/19 | `client.payments.all()` sync, transaction upsert, webhook coexistence, failed → captured resolution, standalone isolation, graceful offline fallback. |
+| **Total Automated Assertions** | **55/55** | **100% Passing** |
 
-## 🧪 Verification & Build
+### Run Test Suite
 
 ```bash
-# Type check TypeScript codebase
+# Run the complete 55-assertion test suite
+npm test
+
+# Type-check TypeScript codebase
 npm run lint
 
 # Build frontend production bundle
 npm run build
-
-# Run local webhook & Razorpay test suite
-npm run test:webhook
 ```
 
 ---

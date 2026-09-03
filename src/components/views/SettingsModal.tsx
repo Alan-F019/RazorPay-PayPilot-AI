@@ -1,13 +1,8 @@
 import React, { useState } from 'react';
 import {
-  Key,
   Webhook,
-  Building2,
-  ShieldCheck,
-  CheckCircle2,
   Copy,
   Check,
-  ExternalLink,
 } from 'lucide-react';
 import { Modal } from '../common/Modal';
 import { Button } from '../common/Button';
@@ -29,6 +24,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const webhookEndpoint = 'https://api.recover.fintech.io/v1/razorpay/webhook';
   const webhookSecret = 'whsec_981273901a892b110948ac';
 
+  const subscribedEvents = [
+    'payment.authorized',
+    'payment.failed',
+    'subscription.charged',
+    'subscription.halted',
+    'order.abandoned',
+    'invoice.expired',
+  ];
+
   const copyToClipboard = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
     setCopiedKey(id);
@@ -40,98 +44,129 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       isOpen={isOpen}
       onClose={onClose}
       title="Merchant Settings & Razorpay Integration"
-      subtitle="Configure webhook endpoints, API credentials, and environment mode"
+      subtitle="Manage your Razorpay webhook connection and environment"
       maxWidth="max-w-xl"
       footer={
         <div className="w-full flex items-center justify-between">
-          <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">
-            Environment: {isTestMode ? 'Test Mode (Sandbox)' : 'Live Mode'}
-          </span>
-          <Button variant="primary" size="sm" onClick={onClose}>
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-mono uppercase px-2.5 py-1 rounded bg-amber-500/10 border border-amber-500/25 text-amber-400 font-semibold flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
+              {isTestMode ? 'Test Mode (Sandbox)' : 'Live Production Mode'}
+            </span>
+          </div>
+          <Button variant="primary" size="sm" onClick={onClose} className="px-4 cursor-pointer">
             Done
           </Button>
         </div>
       }
     >
-      <div className="space-y-5">
-        {/* Merchant Account info */}
-        <div className="p-4 bg-[#0f172a] border border-[#1e293b] rounded-lg space-y-2">
+      <div className="space-y-4 text-slate-300">
+        {/* 1. Merchant Identity Card */}
+        <div className="p-4 bg-[#0f172a] border border-[#1e293b] rounded-lg space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-white">
-              Acme Technologies Pvt Ltd
+            <span className="text-sm font-semibold text-white tracking-tight">
+              PayPilot Demo Merchant
             </span>
             <Badge variant="success" size="sm">
-              Razorpay Verified
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+              Razorpay Connected
             </Badge>
           </div>
-          <div className="grid grid-cols-2 gap-2 text-xs font-mono text-slate-400">
+          <div className="grid grid-cols-2 gap-3 text-xs pt-1 border-t border-[#1e293b]/60">
             <div>
-              <span className="text-slate-500 block text-[11px]">Merchant ID</span>
-              <span className="text-slate-200 font-medium">acc_Nz88192301</span>
+              <span className="text-slate-400 block text-[11px] font-medium">Merchant ID</span>
+              <span className="text-slate-200 font-mono text-xs font-medium mt-0.5 block">
+                Razorpay Test Merchant
+              </span>
             </div>
             <div>
-              <span className="text-slate-500 block text-[11px]">Currency Base</span>
-              <span className="text-slate-200 font-medium">INR (₹)</span>
+              <span className="text-slate-400 block text-[11px] font-medium">Currency Base</span>
+              <span className="text-slate-200 font-mono text-xs font-medium mt-0.5 block">
+                INR (₹)
+              </span>
             </div>
           </div>
         </div>
 
-        {/* Webhook Configuration */}
-        <div className="border border-[#1e293b] rounded-lg p-4 bg-[#0f172a] space-y-3">
+        {/* 2. Webhook Endpoint & Secret Configuration */}
+        <div className="border border-[#1e293b] rounded-lg p-4 bg-[#0f172a] space-y-3.5">
           <div className="flex items-center justify-between">
-            <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
+            <h4 className="text-xs font-semibold text-white uppercase tracking-wider flex items-center gap-1.5">
               <Webhook className="w-3.5 h-3.5 text-blue-400" />
               Razorpay Inbound Webhook URL
             </h4>
-            <span className="text-[11px] text-emerald-400 font-semibold">Listening</span>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <input
-              type="text"
-              readOnly
-              value={webhookEndpoint}
-              className="flex-1 text-xs font-mono p-2 border border-[#1e293b] rounded bg-[#0b0f19] text-slate-300"
-            />
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => copyToClipboard(webhookEndpoint, 'url')}
-              className="text-slate-200 border-[#1e293b]"
-            >
-              {copiedKey === 'url' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-            </Button>
+            <span className="text-[11px] text-emerald-400 font-semibold font-mono flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              Endpoint Active
+            </span>
           </div>
 
           <div>
-            <span className="text-[11px] text-slate-500 block mb-1 font-medium">Webhook Secret</span>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                readOnly
+                value={webhookEndpoint}
+                className="flex-1 text-xs font-mono py-2 px-3 border border-[#1e293b] rounded-md bg-[#0b0f19] text-slate-200 focus:outline-hidden select-all"
+              />
+              <button
+                type="button"
+                onClick={() => copyToClipboard(webhookEndpoint, 'url')}
+                className="px-2.5 py-2 bg-[#1e293b] hover:bg-[#334155] text-slate-200 border border-[#1e293b] rounded-md transition-colors cursor-pointer shrink-0"
+                title="Copy webhook URL"
+              >
+                {copiedKey === 'url' ? (
+                  <Check className="w-3.5 h-3.5 text-emerald-400" />
+                ) : (
+                  <Copy className="w-3.5 h-3.5" />
+                )}
+              </button>
+            </div>
+          </div>
+
+          <div className="pt-1">
+            <span className="text-[11px] text-slate-400 block mb-1 font-medium">
+              Webhook Secret
+            </span>
             <div className="flex items-center gap-2">
               <input
                 type="password"
                 readOnly
                 value={webhookSecret}
-                className="flex-1 text-xs font-mono p-2 border border-[#1e293b] rounded bg-[#0b0f19] text-slate-300"
+                className="flex-1 text-xs font-mono py-2 px-3 border border-[#1e293b] rounded-md bg-[#0b0f19] text-slate-200 focus:outline-hidden"
               />
-              <Button
-                variant="secondary"
-                size="sm"
+              <button
+                type="button"
                 onClick={() => copyToClipboard(webhookSecret, 'secret')}
-                className="text-slate-200 border-[#1e293b]"
+                className="px-2.5 py-2 bg-[#1e293b] hover:bg-[#334155] text-slate-200 border border-[#1e293b] rounded-md transition-colors cursor-pointer shrink-0"
+                title="Copy webhook secret"
               >
-                {copiedKey === 'secret' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-              </Button>
+                {copiedKey === 'secret' ? (
+                  <Check className="w-3.5 h-3.5 text-emerald-400" />
+                ) : (
+                  <Copy className="w-3.5 h-3.5" />
+                )}
+              </button>
             </div>
           </div>
         </div>
 
-        {/* Subscribed Razorpay Events */}
-        <div className="border border-[#1e293b] rounded-lg p-4 bg-[#0f172a] space-y-2">
-          <h4 className="text-xs font-bold text-white">
-            Subscribed Razorpay Webhook Events
-          </h4>
+        {/* 3. Subscribed Razorpay Events */}
+        <div className="border border-[#1e293b] rounded-lg p-4 bg-[#0f172a] space-y-2.5">
+          <div className="flex items-center justify-between">
+            <h4 className="text-xs font-semibold text-white uppercase tracking-wider">
+              Subscribed Razorpay Webhook Events
+            </h4>
+            <span className="text-[10px] font-mono text-slate-400">
+              {subscribedEvents.length} Events Active
+            </span>
+          </div>
           <div className="flex flex-wrap gap-1.5 text-[11px] font-mono">
-            {['payment.failed', 'payment.authorized', 'subscription.halted', 'subscription.charged', 'order.abandoned', 'invoice.expired'].map((ev) => (
-              <span key={ev} className="px-2 py-0.5 rounded bg-[#1e293b] text-slate-300 border border-[#1e293b]">
+            {subscribedEvents.map((ev) => (
+              <span
+                key={ev}
+                className="px-2.5 py-1 rounded-md bg-[#0b0f19] text-slate-300 border border-[#1e293b] hover:border-slate-700 transition-colors"
+              >
                 {ev}
               </span>
             ))}
@@ -141,3 +176,4 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     </Modal>
   );
 };
+

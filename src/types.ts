@@ -20,7 +20,11 @@ export type StrategyType =
   | 'Send Reminder' 
   | 'Escalate'
   | 'Smart Backoff Retry'
-  | 'Mandate Regeneration';
+  | 'Mandate Regeneration'
+  | 'UPI Smart Link'
+  | 'Alternate Domestic Route'
+  | 'Payment Method Update'
+  | 'Gateway Retry';
 
 export interface TimelineEvent {
   id: string;
@@ -92,7 +96,7 @@ export interface AuditLogEntry {
   policyEvaluated: string;
   blockedReason?: string;
   executionChannel: 'Razorpay API' | 'WhatsApp Business' | 'Email Gateway' | 'Merchant Webhook' | 'Internal Scheduler';
-  actor: 'Automated Policy Engine' | 'Safety Circuit Breaker' | 'Manual Operator (ops@merchant.com)';
+  actor: 'Automated Policy Engine' | 'Safety Circuit Breaker' | 'Manual Operator (ops@merchant.com)' | 'Merchant Operator';
 }
 
 export interface CustomerProfile {

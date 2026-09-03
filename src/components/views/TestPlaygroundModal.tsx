@@ -392,21 +392,26 @@ export const TestPlaygroundModal: React.FC<TestPlaygroundModalProps> = ({
                 onClick={() => setActiveMode('simulator')}
                 className={`p-3.5 rounded-lg border text-left transition-all cursor-pointer flex flex-col justify-between ${
                   activeMode === 'simulator'
-                    ? 'bg-blue-950/40 border-blue-500/60 shadow-xs'
+                    ? 'bg-blue-950/40 border-blue-500/60 shadow-xs ring-1 ring-blue-500/30'
                     : 'bg-[#0f172a] border-[#1e293b] hover:border-slate-600'
                 }`}
               >
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-xs font-semibold text-white flex items-center gap-1.5">
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[10px] font-mono font-semibold uppercase px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                      SIMULATED WEBHOOK ENGINE
+                    </span>
+                    {activeMode === 'simulator' && (
+                      <span className="w-2 h-2 rounded-full bg-blue-400"></span>
+                    )}
+                  </div>
+                  <span className="text-xs font-semibold text-white flex items-center gap-1.5 mt-1">
                     <Sparkles className="w-3.5 h-3.5 text-blue-400" />
                     PayPilot Test Simulation
                   </span>
-                  {activeMode === 'simulator' && (
-                    <span className="w-2 h-2 rounded-full bg-blue-400"></span>
-                  )}
                 </div>
-                <p className="text-[11px] text-slate-400 leading-snug">
-                  Simulates instant webhook ingestion (Success or Decline) with backend HMAC signature validation.
+                <p className="text-[11px] text-slate-400 leading-snug mt-2">
+                  Triggers backend HMAC-signed webhook ingestion to test automated revenue recovery workflows.
                 </p>
               </button>
 
@@ -415,21 +420,26 @@ export const TestPlaygroundModal: React.FC<TestPlaygroundModalProps> = ({
                 onClick={() => setActiveMode('live_checkout')}
                 className={`p-3.5 rounded-lg border text-left transition-all cursor-pointer flex flex-col justify-between ${
                   activeMode === 'live_checkout'
-                    ? 'bg-blue-950/40 border-blue-500/60 shadow-xs'
+                    ? 'bg-amber-950/40 border-amber-500/60 shadow-xs ring-1 ring-amber-500/30'
                     : 'bg-[#0f172a] border-[#1e293b] hover:border-slate-600'
                 }`}
               >
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-xs font-semibold text-white flex items-center gap-1.5">
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[10px] font-mono font-semibold uppercase px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                      LIVE RAZORPAY TEST MODE
+                    </span>
+                    {activeMode === 'live_checkout' && (
+                      <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+                    )}
+                  </div>
+                  <span className="text-xs font-semibold text-white flex items-center gap-1.5 mt-1">
                     <CreditCard className="w-3.5 h-3.5 text-amber-400" />
-                    Live Razorpay Test Checkout
+                    Live Razorpay Checkout SDK
                   </span>
-                  {activeMode === 'live_checkout' && (
-                    <span className="w-2 h-2 rounded-full bg-amber-400"></span>
-                  )}
                 </div>
-                <p className="text-[11px] text-slate-400 leading-snug">
-                  Opens official Razorpay Standard Checkout modal with sandbox payment options.
+                <p className="text-[11px] text-slate-400 leading-snug mt-2">
+                  Launches the official Razorpay Standard Checkout popup using active sandbox API keys.
                 </p>
               </button>
             </div>

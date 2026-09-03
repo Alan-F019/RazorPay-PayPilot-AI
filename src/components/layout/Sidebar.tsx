@@ -39,13 +39,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
       id: 'cases' as NavigationTab,
       label: 'Recovery Cases',
       icon: FileSpreadsheet,
-      badge: activeCaseCount ? String(activeCaseCount) : '17',
+      badge: activeCaseCount ? String(activeCaseCount) : undefined,
     },
     { 
       id: 'ai_recovery' as NavigationTab, 
       label: 'AI Recovery', 
       icon: Cpu,
-      badge: '17 queue'
+      badge: activeCaseCount ? `${activeCaseCount} queue` : undefined,
     },
     { 
       id: 'customers' as NavigationTab, 
@@ -65,11 +65,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="px-5 py-4 border-b border-[#1e293b] flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           <div className="w-7 h-7 rounded-md bg-blue-600 flex items-center justify-center text-white font-bold text-xs shadow-xs tracking-tight">
-            R
+            P
           </div>
           <div>
             <div className="flex items-center gap-1.5">
-              <span className="font-semibold text-white text-sm tracking-tight">Recover</span>
+              <span className="font-semibold text-white text-sm tracking-tight">PayPilot</span>
               <span className="text-[10px] uppercase font-mono px-1 py-0.2 bg-blue-500/10 text-blue-400 rounded border border-blue-500/20 font-medium">
                 Razorpay
               </span>
@@ -138,22 +138,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Bottom Footer Section */}
       <div className="p-3 border-t border-[#1e293b] bg-[#090d16] space-y-2">
-        {/* Test Mode Playground Launcher */}
-        {onOpenPlayground && (
-          <button
-            type="button"
-            onClick={onOpenPlayground}
-            className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-md bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/25 text-amber-300 text-xs font-medium transition-colors cursor-pointer"
-          >
-            <span className="flex items-center gap-1.5 font-semibold">
-              <span>🧪</span>
-              <span>Payment Playground</span>
-            </span>
-            <span className="text-[10px] font-mono uppercase bg-amber-500/20 px-1.5 py-0.5 rounded text-amber-400">
-              Test
-            </span>
-          </button>
-        )}
 
         {/* Razorpay Test Mode Indicator / Toggle */}
         <div className="flex items-center justify-between px-2.5 py-2 rounded-md bg-[#0f172a] border border-[#1e293b]">

@@ -79,8 +79,8 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
             {/* Visual Conversion Funnel: At Risk -> Recovered */}
             <div className="mt-6 p-4 bg-[#0f172a] rounded-lg border border-[#1e293b]">
               <div className="flex items-center justify-between text-xs text-slate-400 font-mono mb-2.5">
-                <span className="font-semibold text-slate-300">AI CONVERSION FUNNEL</span>
-                <span className="text-emerald-400 font-medium">
+                <span className="font-semibold text-slate-300">REVENUE CONVERSION FUNNEL</span>
+                <span className="text-emerald-400 font-medium" title="Calculated as (Direct Cashflow Recovered / Gross Failed Checkout)">
                   {formatPercentage(metrics.recoveryRate)} Net Salvage Yield
                 </span>
               </div>
@@ -105,7 +105,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                 <div className="sm:col-span-1 flex flex-col items-center justify-center text-center">
                   <ArrowRight className="w-5 h-5 text-emerald-400" />
                   <span className="text-[9px] font-mono text-emerald-400 font-semibold uppercase">
-                    AI Recov
+                    Recover
                   </span>
                 </div>
 
@@ -152,13 +152,13 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
           </div>
         </div>
 
-        {/* AI Recovery Priority Queue Panel (5 cols) */}
+        {/* Priority Recovery Queue Panel (5 cols) */}
         <div className="lg:col-span-5 bg-[#0b0f19] border border-[#1e293b] rounded-lg p-6 flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-[#1e293b]">
               <div>
                 <h2 className="text-xs font-semibold text-white uppercase tracking-wider">
-                  AI Recovery Queue
+                  Priority Recovery Queue
                 </h2>
                 <span className="text-xs text-blue-400 font-medium">
                   {metrics.casesRequiringAction} transactions require review or execution
@@ -236,7 +236,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
               onClick={onViewAllCases}
               className="text-slate-400 hover:text-slate-200 text-[11px] font-mono hover:underline cursor-pointer"
             >
-              Pipeline queue ({cases.length})
+              Pipeline Total ({cases.length} cases)
             </button>
           </div>
         </div>

@@ -45,8 +45,9 @@ export function seedDatabase() {
       id, transaction_id, customer_id, reason, status, amount, strategy,
       ai_probability, recommended_action, why_explanation, decision_explanation,
       action_taken, policy_applied, approval_status, is_automated,
-      payment_link_url, timeline_json, created_at, recovered_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      payment_link_url, timeline_json, created_at, recovered_at,
+      retry_attempts, recovered_amount
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   for (const c of INITIAL_CASES) {
@@ -100,7 +101,9 @@ export function seedDatabase() {
       c.paymentLinkUrl || null,
       JSON.stringify(c.timeline || []),
       c.createdAt,
-      c.status === 'recovered' ? c.updatedAt : null
+      c.status === 'recovered' ? (c.updatedAt || c.createdAt) : null,
+      c.retryAttempts || 0,
+      c.status === 'recovered' ? c.amount : 0
     );
   }
 

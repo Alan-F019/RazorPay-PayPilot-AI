@@ -8,6 +8,7 @@
     "dev:frontend": "vite --port=3000 --host=0.0.0.0",
     "dev:backend": "tsx watch backend/src/server.ts",
     "seed": "tsx backend/src/seed/seed.ts",
+    "test": "tsx backend/src/test/testDecisionEngine.ts && tsx backend/src/test/testOutcomeEngine.ts && tsx backend/src/test/testWebhook.ts && tsx backend/src/test/testSyncEngine.ts",
     "test:webhook": "tsx backend/src/test/testWebhook.ts",
     "build": "vite build",
     "preview": "vite preview",

@@ -48,6 +48,7 @@ router.post('/razorpay/orders', RazorpayController.createOrder);
 router.get('/razorpay/orders/:orderId', RazorpayController.getOrder);
 router.get('/razorpay/payments/:paymentId', RazorpayController.getPayment);
 router.post('/razorpay/simulate-webhook', RazorpayController.simulateWebhook);
+router.post('/razorpay/sync', RazorpayController.sync);
 
 // Razorpay Webhook Ingestion Endpoint
 router.post('/webhooks/razorpay', WebhookController.handleRazorpayWebhook);

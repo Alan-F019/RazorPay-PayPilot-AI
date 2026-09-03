@@ -153,7 +153,7 @@ export class RecoveryService {
 
     const timeStr = new Date().toLocaleTimeString('en-US', { hour12: false });
     const nowIso = new Date().toISOString();
-    const auditId = `AUD-${Math.floor(10000 + Math.random() * 90000)}`;
+    const auditId = `AUD-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
 
     // Rule 1: Settled Case Lock
     if (existing.status === 'recovered') {
@@ -432,7 +432,7 @@ export class RecoveryService {
     }
 
     const timeStr = new Date().toLocaleTimeString('en-US', { hour12: false });
-    const auditId = `AUD-${Math.floor(10000 + Math.random() * 90000)}`;
+    const auditId = `AUD-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
     const currentAttempts = existing.retryAttempts;
 
     const failedTimelineItem = {
@@ -517,7 +517,7 @@ export class RecoveryService {
     }
 
     const timeStr = new Date().toLocaleTimeString('en-US', { hour12: false });
-    const auditId = `AUD-${Math.floor(10000 + Math.random() * 90000)}`;
+    const auditId = `AUD-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
 
     const newTimelineItem = {
       id: `t-${Date.now()}`,
@@ -570,7 +570,7 @@ export class RecoveryService {
 
     const now = new Date().toISOString();
     const timeStr = new Date().toLocaleTimeString('en-US', { hour12: false });
-    const auditId = `AUD-${Math.floor(10000 + Math.random() * 90000)}`;
+    const auditId = `AUD-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
 
     const newTimelineItem = {
       id: `t-${Date.now()}`,
