@@ -1,49 +1,150 @@
-# PayPilot AI
+# PayPilot AI — Autonomous Revenue Recovery for Razorpay
 
-> AI-powered agentic commerce platform for smarter payment workflows and revenue recovery.
+> AI-powered agentic commerce platform for smarter payment workflows and autonomous revenue recovery.
 
-## 🚀 Project Overview
+## 🏗️ Architecture
 
-PayPilot AI is a smart commerce platform designed to help businesses manage payment-related workflows, identify potential revenue loss, and automate actions using AI-powered agents.
-
-This repository contains the **initial frontend implementation** of the project, including the dashboard UI and core user-facing components.
-
-## ✨ Current Features
-
-### Frontend — Commit 1
-
-* Modern dashboard interface
-* Payment/revenue overview
-* Transaction monitoring UI
-* Revenue recovery interface
-* AI agent interaction section
-* Responsive layout
-* Clean, professional fintech-style design
-* Navigation between major dashboard sections
+```text
+React 19 + Vite + TailwindCSS
+            │
+            ▼
+     Express REST API
+            │
+            ▼
+ Node.js + TypeScript Backend
+            │
+            ▼
+      SQLite Database
+```
 
 ## 🛠️ Tech Stack
 
-* **Frontend:** HTML, CSS, JavaScript
-* **UI:** Responsive custom interface
-* **Version Control:** Git & GitHub
+* **Frontend:** React 19, Vite 6, TailwindCSS 4, Lucide Icons, Motion
+* **Backend:** Node.js, Express 4, TypeScript, tsx
+* **Database:** SQLite
+* **Tooling:** TypeScript 5.8, Concurrently, Dotenv
 
-## 📌 Project Status
+## 🚀 Quick Start
 
-**Phase 1 — Frontend Prototype ✅**
+### Install
 
-The current version focuses on establishing the complete frontend structure and user experience.
+```bash
+git clone <repository-url>
+cd razorpay-PayPilot-AI
+npm install
+```
 
-### Upcoming
+### Configure Environment
 
-* Backend integration
-* Database integration
-* Payment workflow handling
-* AI/agentic automation
-* Revenue recovery logic
-* Real-time transaction data
-* API integration
+Create `.env` from `.env.example`:
 
-## 🎯 Goal
+```env
+PORT=5000
+NODE_ENV=development
+DATABASE_URL=./data/paypilot.db
+FRONTEND_URL=http://localhost:3000
+VITE_API_BASE_URL=http://localhost:5000/api
+```
 
-Build an intelligent payment and commerce platform that can proactively detect payment issues, take automated actions, and help businesses recover otherwise-lost revenue.
+### Seed Demo Data
 
+```bash
+npm run seed
+```
+
+### Run
+
+```bash
+npm run dev
+```
+
+* Frontend: `http://localhost:3000`
+* Backend: `http://localhost:5000`
+
+Run independently:
+
+```bash
+npm run dev:backend
+npm run dev:frontend
+```
+
+## 🔌 API
+
+| Method | Endpoint                                  | Purpose                    |
+| ------ | ----------------------------------------- | -------------------------- |
+| GET    | `/api/health`                             | Service health             |
+| GET    | `/api/dashboard/summary`                  | Revenue & recovery metrics |
+| GET    | `/api/dashboard/trajectory`               | Revenue trajectory         |
+| GET    | `/api/dashboard/causes`                   | Failure causes             |
+| GET    | `/api/transactions`                       | Transaction listing        |
+| GET    | `/api/transactions/:id`                   | Transaction details        |
+| GET    | `/api/recovery-events`                    | Recovery cases             |
+| GET    | `/api/recovery-events/:id`                | Recovery case details      |
+| POST   | `/api/recovery-events/:id/execute-action` | Execute recovery action    |
+| POST   | `/api/recovery-events/:id/escalate`       | Escalate case              |
+| POST   | `/api/recovery-events/:id/resolve`        | Resolve case               |
+| GET    | `/api/customers`                          | Customer accounts          |
+| GET    | `/api/customers/:id`                      | Customer details           |
+| GET    | `/api/audit-logs`                         | Audit trail                |
+| GET    | `/api/guardrails`                         | Safety guardrails          |
+
+## 🗄️ Data Model
+
+```text
+Customer
+   │
+   ├── Transactions
+   │       │
+   │       └── Recovery Events
+   │
+   └── Recovery Events
+
+Recovery Events
+        │
+        └── Audit Logs
+```
+
+The database stores customer profiles, transactions, recovery cases, and audit information. Razorpay payment/order IDs are included in the transaction model for integration with Razorpay services.
+
+## 🔄 Recovery Workflow
+
+```text
+Payment Issue
+     ↓
+Recovery Case
+     ↓
+Analysis & Recommendation
+     ↓
+Guardrail Check
+     ↓
+Action
+     ↓
+Recovered / Escalated / Resolved
+     ↓
+Audit Log
+```
+
+## 🧪 Verification
+
+```bash
+npm run lint
+npm run build
+```
+
+The current implementation passes TypeScript checking and the production build successfully.
+
+## 🔮 Roadmap
+
+* Razorpay Test Mode integration
+* Razorpay payment APIs & webhooks
+* Real-time payment failure detection
+* Automated recovery workflows
+* AI-powered recovery recommendations
+* Agentic recovery actions
+* Advanced revenue intelligence
+
+---
+
+**PayPilot AI**
+
+**Detect → Understand → Decide → Act → Recover**
