@@ -12,7 +12,6 @@ import {
   AuditLogEntry,
   PolicyGuardrails,
   CauseBreakdown,
-  SimulationResult,
   DashboardMetrics,
   DateRange,
   CaseFilterParams,
@@ -350,20 +349,6 @@ export async function fetchPolicyGuardrails(): Promise<PolicyGuardrails> {
   }
 }
 
-/**
- * 13. Trigger automated simulation run
- */
-export async function triggerSimulationRun(): Promise<SimulationResult> {
-  return {
-    transactionsAnalyzed: 148,
-    recoveryOpportunitiesClassified: 42,
-    recoveryActionsExecuted: 17,
-    revenueRecovered: 72400,
-    recoveryRate: 39.2,
-    blockedActionsCount: 2,
-    casesUpdated: 17,
-  };
-}
 
 /**
  * 14. Fetch public Razorpay configuration for Checkout SDK

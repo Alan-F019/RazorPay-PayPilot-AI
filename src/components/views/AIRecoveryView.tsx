@@ -22,7 +22,6 @@ import {
   normalizeFailureCategory,
 } from '../../utils/formatters';
 import { StatusBadge } from '../common/Badge';
-import { Button } from '../common/Button';
 
 interface AIRecoveryViewProps {
   cases: RecoveryCase[];
@@ -30,7 +29,6 @@ interface AIRecoveryViewProps {
   onSelectCase: (caseItem: RecoveryCase) => void;
   onExecuteAction: (caseId: string) => void;
   onEscalateCase: (caseId: string) => void;
-  onOpenSimulation: () => void;
 }
 
 export const AIRecoveryView: React.FC<AIRecoveryViewProps> = ({
@@ -39,7 +37,6 @@ export const AIRecoveryView: React.FC<AIRecoveryViewProps> = ({
   onSelectCase,
   onExecuteAction,
   onEscalateCase,
-  onOpenSimulation,
 }) => {
   const [filterType, setFilterType] = useState<'all' | 'high_prob' | 'needs_review' | 'in_progress'>('all');
   const [executingCases, setExecutingCases] = useState<Record<string, boolean>>({});
@@ -102,16 +99,7 @@ export const AIRecoveryView: React.FC<AIRecoveryViewProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5 shrink-0">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onOpenSimulation}
-              className="text-slate-300 border-[#1e293b] hover:bg-[#131b2e] cursor-pointer text-xs"
-            >
-              <span>🧪 Test Mode Playground</span>
-            </Button>
-          </div>
+
         </div>
 
         <div className="mt-4 pt-3.5 border-t border-[#1e293b] flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400">

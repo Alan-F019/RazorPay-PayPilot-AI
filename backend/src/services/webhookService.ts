@@ -439,10 +439,11 @@ export class WebhookService {
         db.prepare(`
           UPDATE recovery_events
           SET status = 'recovered',
+              recovered_amount = ?,
               recovered_at = ?,
               timeline_json = ?
           WHERE id = ?
-        `).run(nowIso, JSON.stringify(timeline), recovery.id);
+        `).run(amountInINR, nowIso, JSON.stringify(timeline), recovery.id);
       }
     }
 

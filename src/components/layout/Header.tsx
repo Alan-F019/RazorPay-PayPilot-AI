@@ -1,12 +1,8 @@
 import React from 'react';
 import {
   RotateCw,
-  Zap,
-  CheckCircle2,
-  AlertTriangle,
   FlaskConical,
 } from 'lucide-react';
-import { Button } from '../common/Button';
 
 interface HeaderProps {
   title?: string;
@@ -15,10 +11,7 @@ interface HeaderProps {
   onToggleTestMode: () => void;
   onRefresh: () => void;
   isRefreshing: boolean;
-  onOpenSimulation: () => void;
   onOpenPlayground?: () => void;
-  dateRange: '7D' | '30D' | '90D' | 'Custom';
-  onSelectDateRange: (range: '7D' | '30D' | '90D' | 'Custom') => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -27,10 +20,7 @@ export const Header: React.FC<HeaderProps> = ({
   isTestMode,
   onRefresh,
   isRefreshing,
-  onOpenSimulation,
   onOpenPlayground,
-  dateRange,
-  onSelectDateRange,
 }) => {
   return (
     <header className="bg-[#0b0f19] border-b border-[#1e293b] px-6 py-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3 sticky top-0 z-20">
@@ -55,23 +45,6 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Action Controls */}
       <div className="flex items-center flex-wrap gap-2.5">
-        {/* Date range picker: 7D 30D 90D */}
-        <div className="inline-flex rounded-md border border-[#1e293b] bg-[#0f172a] p-0.5">
-          {(['7D', '30D', '90D'] as const).map((range) => (
-            <button
-              key={range}
-              type="button"
-              onClick={() => onSelectDateRange(range)}
-              className={`px-2.5 py-1 text-xs font-medium rounded transition-colors cursor-pointer ${
-                dateRange === range
-                  ? 'bg-[#1e293b] text-white font-semibold'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              {range}
-            </button>
-          ))}
-        </div>
 
         {/* Refresh Button */}
         <button
@@ -95,16 +68,7 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         )}
 
-        {/* Main CTA: Run Recovery Demo */}
-        <Button
-          variant="primary"
-          size="md"
-          onClick={onOpenSimulation}
-          className="cursor-pointer gap-2 bg-blue-600 hover:bg-blue-500 text-white font-medium px-3.5 py-1.5 rounded-md border border-blue-500/30 text-xs shadow-xs"
-        >
-          <Zap className="w-3.5 h-3.5 fill-current text-white" />
-          <span>Run Recovery Demo</span>
-        </Button>
+
       </div>
     </header>
   );

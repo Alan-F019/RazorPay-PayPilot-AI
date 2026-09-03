@@ -7,7 +7,6 @@ import {
   BarChart3,
   Settings,
   Shield,
-  Zap,
 } from 'lucide-react';
 import { NavigationTab } from '../../types';
 
@@ -17,7 +16,6 @@ interface SidebarProps {
   isTestMode: boolean;
   onToggleTestMode: () => void;
   onOpenSettings: () => void;
-  onOpenSimulation: () => void;
   onOpenPlayground?: () => void;
   activeCaseCount: number;
 }
@@ -28,7 +26,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isTestMode,
   onToggleTestMode,
   onOpenSettings,
-  onOpenSimulation,
   onOpenPlayground,
   activeCaseCount,
 }) => {
@@ -119,7 +116,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           );
         })}
 
-        {/* Quick Demo Trigger in Sidebar */}
+        {/* Recovery Engine Status Panel */}
         <div className="pt-4 px-1">
           <div className="p-3 bg-[#0f172a] border border-[#1e293b] rounded-lg">
             <div className="flex items-center justify-between text-[11px] text-slate-300 mb-1 font-medium">
@@ -132,17 +129,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 Active
               </span>
             </div>
-            <p className="text-[11px] text-slate-400 leading-snug mb-2.5">
-              Automated policy pipeline with ₹25k cap & 2-retry safety limit.
+            <p className="text-[11px] text-slate-400 leading-snug">
+              Automated policy pipeline with ₹25k cap &amp; 2-retry safety limit.
             </p>
-            <button
-              type="button"
-              onClick={onOpenSimulation}
-              className="w-full text-center text-xs font-medium py-1.5 px-2 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/30 text-blue-300 hover:text-white rounded transition-colors cursor-pointer flex items-center justify-center gap-1.5"
-            >
-              <Zap className="w-3.5 h-3.5 text-blue-400" />
-              <span>Run Recovery Demo</span>
-            </button>
           </div>
         </div>
       </nav>

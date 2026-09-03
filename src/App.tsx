@@ -4,8 +4,6 @@ import {
   RecoveryCase,
   CustomerProfile,
   PolicyGuardrails,
-  AuditLogEntry,
-  SimulationResult,
   DashboardMetrics,
   DateRange,
   ToastNotification,
@@ -24,7 +22,6 @@ import {
   executeRecoveryAction,
   escalateRecoveryCase,
   resolveRecoveryCase,
-  triggerSimulationRun,
 } from './services/recoveryService';
 
 // Layout & Views
@@ -37,7 +34,7 @@ import { CustomersView } from './components/views/CustomersView';
 import { AnalyticsView } from './components/views/AnalyticsView';
 import { CaseDetailDrawer } from './components/views/CaseDetailDrawer';
 import { CustomerDetailDrawer } from './components/views/CustomerDetailDrawer';
-import { SimulationModal } from './components/views/SimulationModal';
+
 import { SettingsModal } from './components/views/SettingsModal';
 import { TestPlaygroundModal } from './components/views/TestPlaygroundModal';
 import { ToastContainer } from './components/common/ToastContainer';
@@ -92,7 +89,6 @@ export default function App() {
   // Modal / Drawer States
   const [selectedCase, setSelectedCase] = useState<RecoveryCase | null>(null);
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerProfile | null>(null);
-  const [isSimulationOpen, setIsSimulationOpen] = useState<boolean>(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [isPlaygroundOpen, setIsPlaygroundOpen] = useState<boolean>(false);
 
@@ -294,20 +290,7 @@ export default function App() {
     }
   };
 
-  // Action: Run 8-Step Interactive Recovery Simulation
-  const handleApplySimulation = async (result: SimulationResult) => {
-    try {
-      const targetCaseId = 'RP10482';
-      await handleExecuteRecoveryAction(targetCaseId, 'Create Payment Link');
-      showToast(
-        'Simulation Complete',
-        `Recovered ₹${result.revenueRecovered.toLocaleString()} across test transactions.`,
-        'success'
-      );
-    } catch (err) {
-      showToast('Simulation Notice', 'Simulation demo completed.', 'info');
-    }
-  };
+
 
   // Dynamic Header Metadata based on active navigation tab
   const getHeaderMeta = () => {
@@ -362,7 +345,6 @@ export default function App() {
         isTestMode={isTestMode}
         onToggleTestMode={() => setIsTestMode((prev) => !prev)}
         onOpenSettings={() => setIsSettingsOpen(true)}
-        onOpenSimulation={() => setIsSimulationOpen(true)}
         onOpenPlayground={() => setIsPlaygroundOpen(true)}
         activeCaseCount={metrics.casesRequiringAction}
       />
@@ -394,10 +376,7 @@ export default function App() {
           onToggleTestMode={() => setIsTestMode((prev) => !prev)}
           onRefresh={handleRefresh}
           isRefreshing={isRefreshing}
-          onOpenSimulation={() => setIsSimulationOpen(true)}
           onOpenPlayground={() => setIsPlaygroundOpen(true)}
-          dateRange={dateRange}
-          onSelectDateRange={handleSelectDateRange}
         />
 
         {/* View Router (Restricted to Clean 1440px Boundary) */}
@@ -433,7 +412,6 @@ export default function App() {
               onSelectCase={(c) => setSelectedCase(c)}
               onExecuteAction={handleExecuteRecoveryAction}
               onEscalateCase={handleEscalateCase}
-              onOpenSimulation={() => setIsSimulationOpen(true)}
             />
           )}
 
@@ -475,12 +453,7 @@ export default function App() {
         }}
       />
 
-      {/* 5. 8-STEP INTERACTIVE SIMULATION MODAL */}
-      <SimulationModal
-        isOpen={isSimulationOpen}
-        onClose={() => setIsSimulationOpen(false)}
-        onApplySimulation={handleApplySimulation}
-      />
+
 
       {/* 6. SETTINGS & WEBHOOKS MODAL */}
       <SettingsModal
