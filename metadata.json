@@ -1,0 +1,6 @@
+{
+  "name": "Recover",
+  "description": "Enterprise automated revenue recovery and payment retry management platform for Razorpay merchants.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
