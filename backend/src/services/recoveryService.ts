@@ -25,8 +25,10 @@ export class RecoveryService {
 
     if (params.search) {
       const s = `%${params.search}%`;
-      conditions.push('(r.id LIKE ? OR c.name LIKE ? OR c.email LIKE ? OR r.reason LIKE ? OR r.recommended_action LIKE ?)');
-      values.push(s, s, s, s, s);
+      conditions.push(
+        '(r.id LIKE ? OR c.name LIKE ? OR c.email LIKE ? OR r.reason LIKE ? OR r.recommended_action LIKE ? OR t.razorpay_payment_id LIKE ? OR t.razorpay_order_id LIKE ?)'
+      );
+      values.push(s, s, s, s, s, s, s);
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -48,13 +50,16 @@ export class RecoveryService {
         r.status,
         r.created_at as createdAt,
         COALESCE(r.recovered_at, r.created_at) as updatedAt,
+        r.recovered_at as recoveredAt,
+        COALESCE(r.recovered_amount, CASE WHEN r.status = 'recovered' THEN r.amount ELSE 0 END) as recoveredAmount,
+        COALESCE(r.retry_attempts, 0) as retryAttempts,
+        2 as maxRetriesAllowed,
+        r.last_attempt_at as lastAttemptAt,
         t.decline_code as declineCode,
         t.decline_reason as declineReason,
         t.failure_reason as failureReason,
         t.razorpay_payment_id as razorpayPaymentId,
         t.razorpay_order_id as razorpayOrderId,
-        1 as retryAttempts,
-        2 as maxRetriesAllowed,
         1 as contactCountLast7Days,
         r.ai_probability as aiProbability,
         r.recommended_action as recommendedAction,
@@ -105,6 +110,9 @@ export class RecoveryService {
         status: rest.status,
       });
 
+      const actualRecoveredAmount =
+        rest.status === 'recovered' ? (rest.recoveredAmount > 0 ? rest.recoveredAmount : rest.amount) : 0;
+
       return {
         ...rest,
         isAutomated: Boolean(rest.isAutomated),
@@ -115,6 +123,8 @@ export class RecoveryService {
         reasoning: decision.reasoning,
         guardrail: decision.guardrail,
         confidenceLevel: decision.confidenceLevel,
+        recoveredAmount: actualRecoveredAmount,
+        revenueAtRisk: rest.amount,
       };
     });
   }
@@ -124,51 +134,36 @@ export class RecoveryService {
     return list.find((item) => item.id === id) || null;
   }
 
-  public static executeAction(id: string, actionName?: string) {
+  /**
+   * Execute a recovery action safely through policy guardrails.
+   * Transitions state to 'in_progress' (Awaiting Payment), increments attempt count, and logs audit trail.
+   * NEVER directly marks case as 'recovered'.
+   */
+  public static executeAction(
+    id: string,
+    actionName?: string,
+    isManualAuth: boolean = false,
+    actorName: string = 'Automated Policy Engine'
+  ) {
     const db = getDatabase();
     const existing = this.getById(id);
     if (!existing) {
       throw new Error(`Recovery case #${id} not found`);
     }
 
-    // 1. Guardrail Safety Evaluation prior to execution
-    const guardrail: GuardrailEvaluation = RecoveryDecisionEngine.evaluateGuardrails(
-      existing.amount,
-      existing.retryAttempts || 0,
-      {
-        id: existing.customerId,
-        name: existing.customerName,
-        email: existing.customerEmail,
-        tier: existing.customerTier,
-        healthScore: existing.customerHealthScore,
-      },
-      existing.status,
-      existing.aiProbability
-    );
-
-    const now = new Date().toISOString();
     const timeStr = new Date().toLocaleTimeString('en-US', { hour12: false });
+    const nowIso = new Date().toISOString();
     const auditId = `AUD-${Math.floor(10000 + Math.random() * 90000)}`;
 
-    if (!guardrail.allowed) {
-      // Guardrail Blocked / Manual Approval Required
-      const blockedTimelineItem = {
-        id: `t-${Date.now()}`,
-        title: `Action Blocked by Guardrail (${guardrail.policy})`,
-        description: guardrail.reason,
-        timestamp: timeStr,
-        status: 'blocked',
+    // Rule 1: Settled Case Lock
+    if (existing.status === 'recovered') {
+      const guardrail: GuardrailEvaluation = {
+        allowed: false,
+        status: 'BLOCKED',
+        policy: 'Settled Case Lock',
+        reason: 'Payment has already been captured and revenue recovered. Duplicate execution is prohibited.',
+        action: 'BLOCK',
       };
-
-      const updatedTimeline = [...(existing.timeline || []), blockedTimelineItem];
-      const newStatus = guardrail.status === 'MANUAL_APPROVAL_REQUIRED' ? 'needs_review' : 'escalated';
-
-      db.prepare(`
-        UPDATE recovery_events
-        SET status = ?,
-            timeline_json = ?
-        WHERE id = ?
-      `).run(newStatus, JSON.stringify(updatedTimeline), id);
 
       db.prepare(`
         INSERT INTO audit_logs (id, timestamp, case_id, customer_name, action, amount, trigger_event, result, policy_evaluated, blocked_reason, execution_channel, actor)
@@ -188,66 +183,200 @@ export class RecoveryService {
         'Automated Guardrail'
       );
 
-      const updatedCase = this.getById(id);
       return {
         success: false,
         blocked: true,
         guardrail,
         error: guardrail.reason,
-        updatedCase,
-        auditLog: {
-          id: auditId,
-          timestamp: timeStr,
-          caseId: existing.id,
-          customerName: existing.customerName,
-          action: actionName || existing.recommendedAction,
-          amount: existing.amount,
-          trigger: 'API Execution Blocked',
-          result: 'Blocked',
-          policyEvaluated: guardrail.policy,
-          blockedReason: guardrail.reason,
-          executionChannel: 'Policy Engine',
-          actor: 'Automated Guardrail',
-        },
+        updatedCase: existing,
       };
     }
 
-    // 2. Allowed - Dispatch and record action
+    // Rule 2: Escalated Case Lock
+    if (existing.status === 'escalated') {
+      const guardrail: GuardrailEvaluation = {
+        allowed: false,
+        status: 'BLOCKED',
+        policy: 'Ops Escalation Lock',
+        reason: 'Case is currently assigned to merchant operations for manual review. Automated dispatch is locked.',
+        action: 'ESCALATE',
+      };
+
+      db.prepare(`
+        INSERT INTO audit_logs (id, timestamp, case_id, customer_name, action, amount, trigger_event, result, policy_evaluated, blocked_reason, execution_channel, actor)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        auditId,
+        timeStr,
+        existing.id,
+        existing.customerName,
+        actionName || existing.recommendedAction || 'Execute Recovery',
+        existing.amount,
+        'API Execution Blocked',
+        'Blocked',
+        guardrail.policy,
+        guardrail.reason,
+        'Policy Engine',
+        'Automated Guardrail'
+      );
+
+      return {
+        success: false,
+        blocked: true,
+        guardrail,
+        error: guardrail.reason,
+        updatedCase: existing,
+      };
+    }
+
+    // Rule 3: Max Attempts Guardrail (Cap = 2 attempts)
+    if (existing.retryAttempts >= 2) {
+      const guardrail: GuardrailEvaluation = {
+        allowed: false,
+        status: 'BLOCKED',
+        policy: 'Recovery Attempt Limit',
+        reason: `Maximum automated recovery attempts reached (${existing.retryAttempts}/2). Escalating to operations to prevent customer fatigue.`,
+        action: 'ESCALATE',
+      };
+
+      const blockedTimelineItem = {
+        id: `t-${Date.now()}`,
+        title: 'Action Blocked — Maximum Recovery Attempts Exceeded',
+        description: guardrail.reason,
+        timestamp: timeStr,
+        status: 'blocked',
+      };
+
+      const updatedTimeline = [...(existing.timeline || []), blockedTimelineItem];
+
+      db.prepare(`
+        UPDATE recovery_events
+        SET status = 'escalated',
+            timeline_json = ?
+        WHERE id = ?
+      `).run(JSON.stringify(updatedTimeline), id);
+
+      db.prepare(`
+        INSERT INTO audit_logs (id, timestamp, case_id, customer_name, action, amount, trigger_event, result, policy_evaluated, blocked_reason, execution_channel, actor)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        auditId,
+        timeStr,
+        existing.id,
+        existing.customerName,
+        actionName || existing.recommendedAction || 'Execute Recovery',
+        existing.amount,
+        'API Execution Blocked',
+        'Blocked',
+        guardrail.policy,
+        guardrail.reason,
+        'Policy Engine',
+        'Automated Guardrail'
+      );
+
+      return {
+        success: false,
+        blocked: true,
+        guardrail,
+        error: guardrail.reason,
+        updatedCase: this.getById(id),
+      };
+    }
+
+    // Rule 4: ₹25,000 Amount Guardrail Check
+    if (existing.amount > 25000 && !isManualAuth) {
+      const guardrail: GuardrailEvaluation = {
+        allowed: false,
+        status: 'MANUAL_APPROVAL_REQUIRED',
+        policy: 'Automated Recovery Amount Cap (₹25,000)',
+        reason: `Transaction volume (₹${existing.amount.toLocaleString()}) exceeds the ₹25,000 automated recovery threshold. Requires explicit manual merchant authorization.`,
+        action: 'MANUAL_REVIEW',
+      };
+
+      const blockedTimelineItem = {
+        id: `t-${Date.now()}`,
+        title: 'Action Held — Manual Authorization Required',
+        description: guardrail.reason,
+        timestamp: timeStr,
+        status: 'blocked',
+      };
+
+      const updatedTimeline = [...(existing.timeline || []), blockedTimelineItem];
+
+      db.prepare(`
+        UPDATE recovery_events
+        SET status = 'needs_review',
+            timeline_json = ?
+        WHERE id = ?
+      `).run(JSON.stringify(updatedTimeline), id);
+
+      db.prepare(`
+        INSERT INTO audit_logs (id, timestamp, case_id, customer_name, action, amount, trigger_event, result, policy_evaluated, blocked_reason, execution_channel, actor)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        auditId,
+        timeStr,
+        existing.id,
+        existing.customerName,
+        actionName || existing.recommendedAction || 'Execute Recovery',
+        existing.amount,
+        'Manual Approval Required',
+        'Held for Review',
+        guardrail.policy,
+        guardrail.reason,
+        'Policy Engine',
+        'Automated Guardrail'
+      );
+
+      return {
+        success: false,
+        blocked: true,
+        guardrail,
+        error: guardrail.reason,
+        updatedCase: this.getById(id),
+      };
+    }
+
+    // Execution is Permitted!
+    const newAttemptCount = existing.retryAttempts + 1;
     const paymentLink = existing.paymentLinkUrl || `https://rzp.io/i/rec_${id.toLowerCase()}`;
-    const newTimelineItem = {
+    const selectedAction = actionName || existing.recommendedAction || 'Create Payment Link';
+
+    const dispatchedTimelineItem = {
       id: `t-${Date.now()}`,
-      title: 'Recovery dispatched via Razorpay API',
-      description: `Action "${actionName || existing.recommendedAction}" dispatched. Payment link: ${paymentLink}`,
+      title: `Recovery attempt #${newAttemptCount} dispatched`,
+      description: `Action "${selectedAction}" dispatched via Razorpay API. Awaiting customer payment. Link: ${paymentLink}`,
       timestamp: timeStr,
       status: 'completed',
     };
 
-    const updatedTimeline = [...(existing.timeline || []), newTimelineItem];
+    const updatedTimeline = [...(existing.timeline || []), dispatchedTimelineItem];
 
     db.prepare(`
       UPDATE recovery_events
-      SET status = 'recovered',
-          recovered_at = ?,
+      SET status = 'in_progress',
+          retry_attempts = ?,
+          last_attempt_at = ?,
           payment_link_url = ?,
           action_taken = ?,
           timeline_json = ?
       WHERE id = ?
     `).run(
-      now,
+      newAttemptCount,
+      nowIso,
       paymentLink,
-      actionName || 'Payment Link Generated & Delivered',
+      selectedAction,
       JSON.stringify(updatedTimeline),
       id
     );
 
-    // Also update transaction status to captured
-    db.prepare(`
-      UPDATE transactions
-      SET status = 'captured'
-      WHERE id = ?
-    `).run(existing.transactionId);
-
     // Record audit log
+    const actor = isManualAuth ? 'Merchant Operator' : actorName;
+    const trigger = isManualAuth ? 'Manual Authorization Execution' : 'API Execution';
+    const policy = isManualAuth
+      ? 'Manual Override Authorization Protocol'
+      : (existing.policyApplied || 'Automated Recovery Protocol');
+
     db.prepare(`
       INSERT INTO audit_logs (id, timestamp, case_id, customer_name, action, amount, trigger_event, result, policy_evaluated, execution_channel, actor)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -256,33 +385,127 @@ export class RecoveryService {
       timeStr,
       existing.id,
       existing.customerName,
-      actionName || existing.recommendedAction || 'Execute Recovery',
+      selectedAction,
       existing.amount,
-      'API Execution',
-      'Successful',
-      guardrail.policy,
+      trigger,
+      'Dispatched / Awaiting Payment',
+      policy,
       'Razorpay API',
-      'Automated Policy Engine'
+      actor
     );
 
     const updatedCase = this.getById(id);
     return {
       success: true,
+      status: 'in_progress',
+      attemptNumber: newAttemptCount,
       updatedCase,
-      guardrail,
       auditLog: {
         id: auditId,
         timestamp: timeStr,
         caseId: existing.id,
         customerName: existing.customerName,
-        action: actionName || existing.recommendedAction,
+        action: selectedAction,
         amount: existing.amount,
-        trigger: 'API Execution',
-        result: 'Successful',
-        policyEvaluated: guardrail.policy,
+        trigger,
+        result: 'Dispatched / Awaiting Payment',
+        policyEvaluated: policy,
         executionChannel: 'Razorpay API',
-        actor: 'Automated Policy Engine',
+        actor,
       },
+    };
+  }
+
+  /**
+   * Records a failed recovery attempt.
+   * If attempts reach 2, auto-escalates to ops.
+   */
+  public static recordFailedAttempt(
+    id: string,
+    failureReason: string = 'Payment retry authorization declined by issuer',
+    actor: string = 'Razorpay Webhook Engine'
+  ) {
+    const db = getDatabase();
+    const existing = this.getById(id);
+    if (!existing) {
+      throw new Error(`Recovery case #${id} not found`);
+    }
+
+    const timeStr = new Date().toLocaleTimeString('en-US', { hour12: false });
+    const auditId = `AUD-${Math.floor(10000 + Math.random() * 90000)}`;
+    const currentAttempts = existing.retryAttempts;
+
+    const failedTimelineItem = {
+      id: `t-${Date.now()}`,
+      title: `Recovery attempt #${currentAttempts || 1} failed`,
+      description: `Payment not completed: ${failureReason}`,
+      timestamp: timeStr,
+      status: 'failed',
+    };
+
+    let updatedTimeline = [...(existing.timeline || []), failedTimelineItem];
+    let nextStatus: string = 'pending';
+
+    if (currentAttempts >= 2) {
+      nextStatus = 'escalated';
+      const escalationItem = {
+        id: `t-${Date.now() + 1}`,
+        title: 'Maximum Recovery Attempts Reached — Escalated',
+        description: `Reached ${currentAttempts}/2 maximum recovery attempts. Case automatically assigned to merchant operations.`,
+        timestamp: timeStr,
+        status: 'completed',
+      };
+      updatedTimeline.push(escalationItem);
+
+      db.prepare(`
+        INSERT INTO audit_logs (id, timestamp, case_id, customer_name, action, amount, trigger_event, result, policy_evaluated, blocked_reason, execution_channel, actor)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        auditId,
+        timeStr,
+        existing.id,
+        existing.customerName,
+        'Auto-Escalate to Ops',
+        existing.amount,
+        'Max Retries Exceeded',
+        'Escalated to Ops',
+        'Recovery Attempt Limit',
+        'Reached 2/2 attempts',
+        'Policy Engine',
+        'Automated Circuit Breaker'
+      );
+    } else {
+      db.prepare(`
+        INSERT INTO audit_logs (id, timestamp, case_id, customer_name, action, amount, trigger_event, result, policy_evaluated, execution_channel, actor)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        auditId,
+        timeStr,
+        existing.id,
+        existing.customerName,
+        'Recovery Attempt Failed',
+        existing.amount,
+        'Payment Webhook',
+        'Failed Attempt',
+        existing.policyApplied || 'Automated Recovery Protocol',
+        'Razorpay API',
+        actor
+      );
+    }
+
+    db.prepare(`
+      UPDATE recovery_events
+      SET status = ?,
+          timeline_json = ?
+      WHERE id = ?
+    `).run(nextStatus, JSON.stringify(updatedTimeline), id);
+
+    const updatedCase = this.getById(id);
+    return {
+      success: true,
+      status: nextStatus,
+      attempts: currentAttempts,
+      updatedCase,
     };
   }
 
@@ -293,11 +516,14 @@ export class RecoveryService {
       throw new Error(`Recovery case #${id} not found`);
     }
 
+    const timeStr = new Date().toLocaleTimeString('en-US', { hour12: false });
+    const auditId = `AUD-${Math.floor(10000 + Math.random() * 90000)}`;
+
     const newTimelineItem = {
       id: `t-${Date.now()}`,
       title: 'Case escalated to Ops',
       description: `Escalated by operator: ${reason}`,
-      timestamp: new Date().toLocaleTimeString('en-US', { hour12: false }),
+      timestamp: timeStr,
       status: 'completed',
     };
 
@@ -309,6 +535,24 @@ export class RecoveryService {
           timeline_json = ?
       WHERE id = ?
     `).run(JSON.stringify(updatedTimeline), id);
+
+    db.prepare(`
+      INSERT INTO audit_logs (id, timestamp, case_id, customer_name, action, amount, trigger_event, result, policy_evaluated, blocked_reason, execution_channel, actor)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      auditId,
+      timeStr,
+      existing.id,
+      existing.customerName,
+      'Escalate to Ops',
+      existing.amount,
+      'Manual Escalation',
+      'Escalated to Ops',
+      'Merchant Operational Escalation',
+      reason,
+      'Dashboard UI',
+      'Merchant Operator'
+    );
 
     const updatedCase = this.getById(id);
     return {
@@ -325,11 +569,14 @@ export class RecoveryService {
     }
 
     const now = new Date().toISOString();
+    const timeStr = new Date().toLocaleTimeString('en-US', { hour12: false });
+    const auditId = `AUD-${Math.floor(10000 + Math.random() * 90000)}`;
+
     const newTimelineItem = {
       id: `t-${Date.now()}`,
-      title: 'Manually marked resolved',
-      description: 'Case closed and marked as recovered in database.',
-      timestamp: new Date().toLocaleTimeString('en-US', { hour12: false }),
+      title: 'Payment recovered & settled',
+      description: `Payment completed. ₹${existing.amount.toLocaleString()} credited to merchant.`,
+      timestamp: timeStr,
       status: 'completed',
     };
 
@@ -338,16 +585,34 @@ export class RecoveryService {
     db.prepare(`
       UPDATE recovery_events
       SET status = 'recovered',
+          recovered_amount = ?,
           recovered_at = ?,
           timeline_json = ?
       WHERE id = ?
-    `).run(now, JSON.stringify(updatedTimeline), id);
+    `).run(existing.amount, now, JSON.stringify(updatedTimeline), id);
 
     db.prepare(`
       UPDATE transactions
       SET status = 'captured'
       WHERE id = ?
     `).run(existing.transactionId);
+
+    db.prepare(`
+      INSERT INTO audit_logs (id, timestamp, case_id, customer_name, action, amount, trigger_event, result, policy_evaluated, execution_channel, actor)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      auditId,
+      timeStr,
+      existing.id,
+      existing.customerName,
+      'Revenue Recovered',
+      existing.amount,
+      'Payment Settlement',
+      'Successful',
+      'Revenue Recovery Settlement Protocol',
+      'Razorpay Settlement',
+      'Settlement Engine'
+    );
 
     const updatedCase = this.getById(id);
     return {

@@ -352,8 +352,8 @@ export class WebhookService {
 
         timeline.push({
           id: `t-${Date.now()}`,
-          title: 'Payment captured via Razorpay',
-          description: `Confirmed payment.captured for ₹${amountInINR.toLocaleString()}. Case successfully recovered.`,
+          title: 'Razorpay Test Payment Captured',
+          description: `Customer completed checkout. ₹${amountInINR.toLocaleString()} revenue recovered.`,
           timestamp: new Date().toLocaleTimeString('en-US', { hour12: false }),
           status: 'completed',
         });
@@ -361,19 +361,20 @@ export class WebhookService {
         db.prepare(`
           UPDATE recovery_events
           SET status = 'recovered',
+              recovered_amount = ?,
               recovered_at = ?,
               timeline_json = ?
           WHERE id = ?
-        `).run(nowIso, JSON.stringify(timeline), recovery.id);
+        `).run(amountInINR, nowIso, JSON.stringify(timeline), recovery.id);
 
         this.recordAuditLog({
           caseId: recovery.id,
           customerName: 'Customer',
-          action: 'Recovery case resolved',
+          action: 'Revenue Recovered',
           amount: amountInINR,
           trigger: payload.event,
           result: 'Successful',
-          policyEvaluated: 'Payment Settlement Protocol',
+          policyEvaluated: 'Revenue Recovery Settlement Protocol',
         });
       }
     } else {

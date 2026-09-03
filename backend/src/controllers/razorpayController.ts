@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { RazorpayService } from '../services/razorpayService';
 import { WebhookService, WebhookPayload } from '../services/webhookService';
+import { getDatabase } from '../db/database';
 import { config } from '../config/env';
 
 export class RazorpayController {
@@ -126,6 +127,7 @@ export class RazorpayController {
         declineReason = 'Card issuer reported insufficient funds',
         orderId,
         paymentId: customPaymentId,
+        caseId, // For captured: resolve by looking up the case's stored payment/order IDs
       } = req.body;
 
       if (!amount || typeof amount !== 'number' || amount <= 0) {
@@ -136,11 +138,36 @@ export class RazorpayController {
         });
       }
 
-      const paymentId = customPaymentId || `pay_sim_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
-      const resolvedOrderId = orderId || `order_sim_${Date.now().toString(36)}`;
-      const amountInPaise = Math.round(amount * 100);
       const isFailed = outcome === 'failed';
       const eventType = isFailed ? 'payment.failed' : 'payment.captured';
+
+      let resolvedPaymentId: string;
+      let resolvedOrderId: string;
+
+      if (!isFailed && caseId) {
+        // For captured simulations with a caseId, look up the real payment/order IDs
+        // so the webhook pipeline can match and resolve the exact case
+        const db = getDatabase();
+        const txnRow = db.prepare(`
+          SELECT t.razorpay_payment_id, t.razorpay_order_id, t.id as txnId
+          FROM recovery_events r
+          JOIN transactions t ON r.transaction_id = t.id
+          WHERE r.id = ?
+        `).get(caseId) as any;
+
+        if (txnRow) {
+          resolvedPaymentId = txnRow.razorpay_payment_id || txnRow.txnId.replace('txn_', '');
+          resolvedOrderId = txnRow.razorpay_order_id || orderId || `order_sim_${Date.now().toString(36)}`;
+        } else {
+          resolvedPaymentId = customPaymentId || `pay_sim_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+          resolvedOrderId = orderId || `order_sim_${Date.now().toString(36)}`;
+        }
+      } else {
+        resolvedPaymentId = customPaymentId || `pay_sim_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+        resolvedOrderId = orderId || `order_sim_${Date.now().toString(36)}`;
+      }
+
+      const amountInPaise = Math.round(amount * 100);
 
       const payload: WebhookPayload = {
         entity: 'event',
@@ -151,7 +178,7 @@ export class RazorpayController {
         payload: {
           payment: {
             entity: {
-              id: paymentId,
+              id: resolvedPaymentId,
               entity: 'payment',
               amount: amountInPaise,
               currency,
@@ -175,7 +202,7 @@ export class RazorpayController {
         success: true,
         simulation: true,
         event: eventType,
-        paymentId,
+        paymentId: resolvedPaymentId,
         orderId: resolvedOrderId,
         amount,
         customerName,

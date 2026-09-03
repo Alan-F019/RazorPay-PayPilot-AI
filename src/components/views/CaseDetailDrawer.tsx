@@ -20,6 +20,8 @@ import {
   Shield,
   FileText,
   Lock,
+  DollarSign,
+  TrendingUp,
 } from 'lucide-react';
 import { RecoveryCase, PolicyGuardrails } from '../../types';
 import { Drawer } from '../common/Drawer';
@@ -55,12 +57,16 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
 }) => {
   const [copiedLink, setCopiedLink] = useState(false);
   const [isActionLoading, setIsActionLoading] = useState(false);
+  const [isSimulatingPayment, setIsSimulatingPayment] = useState(false);
   const [generatedLink, setGeneratedLink] = useState<string | null>(null);
-  const [isRecoveredLocal, setIsRecoveredLocal] = useState(false);
 
   if (!caseItem) return null;
 
-  const isAlreadyRecovered = caseItem.status === 'recovered' || isRecoveredLocal;
+  const isAlreadyRecovered = caseItem.status === 'recovered';
+  const isEscalated = caseItem.status === 'escalated';
+  const isInProgress = caseItem.status === 'in_progress';
+  const isNeedsReview = caseItem.status === 'needs_review';
+
   const currentLink =
     generatedLink ||
     caseItem.paymentLinkUrl ||
@@ -72,9 +78,13 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
     caseItem.issueDescription ||
     'Payment failed during checkout';
 
-  const guardrailStatus = caseItem.guardrail?.status || (caseItem.amount > 25000 ? 'MANUAL_APPROVAL_REQUIRED' : 'ALLOWED');
-  const isGuardrailBlocked = guardrailStatus === 'BLOCKED';
-  const isManualApproval = guardrailStatus === 'MANUAL_APPROVAL_REQUIRED';
+  const attemptsCount = caseItem.retryAttempts || 0;
+  const isMaxAttempts = attemptsCount >= 2;
+  const guardrailStatus =
+    caseItem.guardrail?.status ||
+    (caseItem.amount > 25000 ? 'MANUAL_APPROVAL_REQUIRED' : isMaxAttempts ? 'BLOCKED' : 'ALLOWED');
+  const isGuardrailBlocked = guardrailStatus === 'BLOCKED' || isMaxAttempts;
+  const isManualApproval = guardrailStatus === 'MANUAL_APPROVAL_REQUIRED' || isNeedsReview;
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(currentLink);
@@ -82,33 +92,74 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
     setTimeout(() => setCopiedLink(false), 2000);
   };
 
-  const handleGenerateOrExecute = () => {
+  const handleGenerateOrExecute = async () => {
     setIsActionLoading(true);
-    setTimeout(() => {
-      setIsActionLoading(false);
-      setGeneratedLink(`https://rzp.io/i/rec_${caseItem.id.toLowerCase()}`);
-      if (onTriggerManualRetry) {
-        onTriggerManualRetry(caseItem.id);
+    try {
+      const res = await fetch(`/api/recovery-events/${caseItem.id}/execute-action`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          actionName: caseItem.recommendedAction,
+          isManualAuth: isManualApproval,
+          actor: isManualApproval ? 'Merchant Operator' : 'Automated Policy Engine',
+        }),
+      }).then((r) => r.json());
+
+      if (res.success) {
+        setGeneratedLink(`https://rzp.io/i/rec_${caseItem.id.toLowerCase()}`);
+        if (onTriggerManualRetry) {
+          onTriggerManualRetry(caseItem.id);
+        }
+      } else if (res.blocked) {
+        if (onEscalateCase) {
+          onEscalateCase(caseItem.id);
+        }
       }
-    }, 600);
+    } catch (e) {
+      console.error('Action execution failed:', e);
+    } finally {
+      setIsActionLoading(false);
+    }
   };
 
-  const handleMarkAsRecovered = () => {
-    setIsRecoveredLocal(true);
-    if (onResolveCase) {
-      onResolveCase(caseItem.id);
+  const handleSimulatePaymentSuccess = async () => {
+    setIsSimulatingPayment(true);
+    try {
+      // Sends verified test capture through the backend webhook processing pipeline.
+      // Passes caseId so the backend can look up the real transaction's payment/order IDs
+      // and resolve ONLY this specific recovery case — never unrelated cases.
+      await fetch('/api/razorpay/simulate-webhook', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: caseItem.amount,
+          outcome: 'captured',
+          caseId: caseItem.id, // backend resolves the exact transaction IDs
+          customerEmail: caseItem.customerEmail,
+          customerName: caseItem.customerName,
+        }),
+      });
+
+      if (onResolveCase) {
+        onResolveCase(caseItem.id);
+      }
+    } catch (e) {
+      console.error('Payment capture simulation failed:', e);
+    } finally {
+      setIsSimulatingPayment(false);
     }
   };
 
   // Fallback reasoning bullets if none attached from API
-  const explainableReasoning = (caseItem.reasoning && caseItem.reasoning.length > 0)
-    ? caseItem.reasoning
-    : [
-        `${failureCat} detected and classified via failure heuristics`,
-        `Account health is Healthy with reliable historical volume`,
-        `Transaction volume (${formatINR(caseItem.amount)}) evaluated against policy guardrails`,
-        `Recovery attempt counter within safety threshold (1/2)`,
-      ];
+  const explainableReasoning =
+    caseItem.reasoning && caseItem.reasoning.length > 0
+      ? caseItem.reasoning
+      : [
+          `${failureCat} classified from transaction error telemetry`,
+          `Account tier ${caseItem.customerTier || 'Standard'} reflects active subscription engagement`,
+          `Transaction volume (${formatINR(caseItem.amount)}) validated against safety guardrails`,
+          `Recovery attempt ${attemptsCount}/2 within safety limits`,
+        ];
 
   // Active timeline items
   const activeTimeline =
@@ -146,29 +197,6 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
             timestamp: '14:28:15',
             status: 'completed',
           },
-          {
-            title: 'Recovery action selected',
-            desc: `Formulated "${caseItem.recommendedAction}" based on account history and guardrail policies`,
-            timestamp: '14:28:16',
-            status: 'completed',
-          },
-          {
-            title: 'Payment link generated',
-            desc:
-              isAlreadyRecovered || generatedLink
-                ? `Razorpay recovery payment link dispatched: ${currentLink}`
-                : 'Ready for automated link delivery',
-            timestamp: isAlreadyRecovered || generatedLink ? '14:28:18' : 'Pending',
-            status: isAlreadyRecovered || generatedLink ? 'completed' : 'in_progress',
-          },
-          {
-            title: 'Payment recovered',
-            desc: isAlreadyRecovered
-              ? `Customer completed payment. ${formatINR(caseItem.amount)} credited to merchant.`
-              : 'Awaiting customer completion or settlement webhook confirmation',
-            timestamp: isAlreadyRecovered ? '14:31:02' : 'Pending',
-            status: isAlreadyRecovered ? 'completed' : 'pending',
-          },
         ];
 
   return (
@@ -202,7 +230,7 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
                     className="text-purple-300 border-purple-500/30 bg-purple-500/10 hover:bg-purple-500/20 font-medium cursor-pointer"
                   >
                     <Lock className="w-4 h-4 mr-1.5" />
-                    Blocked by Guardrail → Escalate
+                    Max Retries / Blocked → Escalate
                   </Button>
                 ) : isManualApproval ? (
                   <Button
@@ -213,7 +241,18 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
                     className="bg-amber-600 hover:bg-amber-500 text-white font-medium cursor-pointer"
                   >
                     <ShieldCheck className="w-4 h-4 mr-1.5" />
-                    Authorize & Execute Action
+                    Authorize & Execute Attempt {attemptsCount + 1}/2
+                  </Button>
+                ) : isInProgress ? (
+                  <Button
+                    variant="primary"
+                    size="md"
+                    onClick={handleSimulatePaymentSuccess}
+                    loading={isSimulatingPayment}
+                    className="bg-emerald-600 hover:bg-emerald-500 text-white font-medium cursor-pointer"
+                  >
+                    <Check className="w-4 h-4 mr-1.5" />
+                    Simulate Payment Captured
                   </Button>
                 ) : (
                   <Button
@@ -224,18 +263,19 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
                     className="bg-blue-600 hover:bg-blue-500 text-white font-medium cursor-pointer"
                   >
                     <Zap className="w-4 h-4 fill-current mr-1.5" />
-                    Execute {caseItem.recommendedAction}
+                    Execute {caseItem.recommendedAction} (Attempt {attemptsCount + 1}/2)
                   </Button>
                 )}
-                {generatedLink && (
+                {isInProgress && !isAlreadyRecovered && (
                   <Button
-                    variant="primary"
-                    size="md"
-                    onClick={handleMarkAsRecovered}
-                    className="bg-emerald-600 hover:bg-emerald-500 text-white font-medium cursor-pointer"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleGenerateOrExecute}
+                    loading={isActionLoading}
+                    className="text-blue-300 border-blue-500/30 bg-blue-500/10 hover:bg-blue-500/20 cursor-pointer text-xs"
                   >
-                    <Check className="w-4 h-4 mr-1.5" />
-                    Simulate Payment Success
+                    <RefreshCw className="w-3.5 h-3.5 mr-1" />
+                    Dispatch Attempt 2
                   </Button>
                 )}
               </>
@@ -243,7 +283,7 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
               <div className="flex items-center gap-2">
                 <span className="text-xs font-semibold text-emerald-400 flex items-center gap-1">
                   <CheckCircle2 className="w-4 h-4" />
-                  Successfully Recovered
+                  Successfully Recovered ({formatINR(caseItem.recoveredAmount || caseItem.amount)})
                 </span>
                 <Button
                   variant="secondary"
@@ -260,53 +300,121 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
       }
     >
       <div className="space-y-6 text-slate-300">
-        {/* 1. Case Core Summary Header */}
-        <div className="p-4 bg-[#0b0f19] border border-[#1e293b] rounded-lg grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-          <div>
-            <span className="text-slate-500 block text-[11px] font-medium">Customer</span>
-            {onInspectCustomer ? (
-              <button
-                type="button"
-                onClick={() => onInspectCustomer(caseItem.customerName)}
-                className="font-semibold text-white hover:text-blue-400 mt-0.5 block truncate transition-colors text-left cursor-pointer underline decoration-slate-600 hover:decoration-blue-400"
-              >
-                {caseItem.customerName}
-              </button>
-            ) : (
-              <span className="font-semibold text-white mt-0.5 block truncate">
-                {caseItem.customerName}
-              </span>
-            )}
-            <span className="text-[11px] text-slate-400 truncate block">
-              {caseItem.customerEmail}
+        {/* 1. Recovery Lifecycle Progress Indicator */}
+        <div className="p-4 bg-[#0b0f19] border border-[#1e293b] rounded-lg space-y-2.5">
+          <div className="flex items-center justify-between text-xs">
+            <span className="font-semibold text-white uppercase tracking-wider text-[11px]">
+              Recovery Lifecycle State
+            </span>
+            <span className="font-mono text-[11px] text-blue-400 font-medium">
+              {isMaxAttempts ? 'Max Retries Reached (2/2)' : `Attempt ${attemptsCount} of 2`}
             </span>
           </div>
 
+          <div className="grid grid-cols-4 gap-2 text-center text-[10px] font-mono font-medium">
+            <div
+              className={`p-2 rounded border ${
+                true
+                  ? 'bg-blue-500/15 text-blue-300 border-blue-500/40'
+                  : 'bg-[#0f172a] text-slate-500 border-[#1e293b]'
+              }`}
+            >
+              1. AI Recommended
+            </div>
+            <div
+              className={`p-2 rounded border ${
+                attemptsCount >= 1 || isInProgress || isAlreadyRecovered
+                  ? 'bg-blue-500/15 text-blue-300 border-blue-500/40'
+                  : isGuardrailBlocked
+                  ? 'bg-red-500/15 text-red-300 border-red-500/40'
+                  : 'bg-[#0f172a] text-slate-500 border-[#1e293b]'
+              }`}
+            >
+              2. Action Dispatched
+            </div>
+            <div
+              className={`p-2 rounded border ${
+                isInProgress
+                  ? 'bg-blue-600 text-white font-bold border-blue-400 animate-pulse'
+                  : isAlreadyRecovered
+                  ? 'bg-blue-500/15 text-blue-300 border-blue-500/40'
+                  : isEscalated
+                  ? 'bg-purple-500/15 text-purple-300 border-purple-500/40'
+                  : 'bg-[#0f172a] text-slate-500 border-[#1e293b]'
+              }`}
+            >
+              3. Awaiting Payment
+            </div>
+            <div
+              className={`p-2 rounded border ${
+                isAlreadyRecovered
+                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 font-bold'
+                  : isEscalated
+                  ? 'bg-purple-500/20 text-purple-300 border-purple-500/50 font-bold'
+                  : 'bg-[#0f172a] text-slate-500 border-[#1e293b]'
+              }`}
+            >
+              {isAlreadyRecovered ? '4. Recovered ✓' : isEscalated ? '4. Escalated' : '4. Recovered'}
+            </div>
+          </div>
+        </div>
+
+        {/* 2. Financial Outcome Summary Card */}
+        <div className="p-4 bg-[#0f172a] border border-[#1e293b] rounded-lg grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
           <div>
-            <span className="text-slate-500 block text-[11px] font-medium">Amount</span>
+            <span className="text-slate-500 block text-[11px] font-medium">Revenue at Risk</span>
             <span className="text-base font-bold font-mono text-white mt-0.5 block">
               {formatINR(caseItem.amount)}
             </span>
           </div>
 
           <div>
-            <span className="text-slate-500 block text-[11px] font-medium">Failure Category</span>
+            <span className="text-slate-500 block text-[11px] font-medium">Recovered Revenue</span>
+            <span
+              className={`text-base font-bold font-mono mt-0.5 block ${
+                isAlreadyRecovered ? 'text-emerald-400' : 'text-slate-400'
+              }`}
+            >
+              {formatINR(isAlreadyRecovered ? (caseItem.recoveredAmount || caseItem.amount) : 0)}
+            </span>
+          </div>
+
+          <div>
+            <span className="text-slate-500 block text-[11px] font-medium">Recovery Outcome</span>
             <div className="mt-1">
-              <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-500/10 text-amber-300 border border-amber-500/25">
-                {failureCat}
-              </span>
+              {isAlreadyRecovered ? (
+                <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                  Recovered
+                </span>
+              ) : isInProgress ? (
+                <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-blue-500/20 text-blue-300 border border-blue-500/40">
+                  Awaiting Payment
+                </span>
+              ) : isEscalated ? (
+                <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/40">
+                  Escalated to Ops
+                </span>
+              ) : isNeedsReview ? (
+                <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                  Needs Review
+                </span>
+              ) : (
+                <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
+                  Ready to Dispatch
+                </span>
+              )}
             </div>
           </div>
 
           <div>
-            <span className="text-slate-500 block text-[11px] font-medium">Current Status</span>
-            <div className="mt-1">
-              <StatusBadge status={isAlreadyRecovered ? 'recovered' : caseItem.status} />
-            </div>
+            <span className="text-slate-500 block text-[11px] font-medium">Attempt Counter</span>
+            <span className="text-sm font-bold font-mono text-slate-200 mt-1 block">
+              {isMaxAttempts ? '2/2 (Max Reached)' : `${attemptsCount}/2`}
+            </span>
           </div>
         </div>
 
-        {/* 2. Failure Diagnostic & Original Razorpay Error Description */}
+        {/* 3. Failure Diagnostic & Original Razorpay Error Description */}
         <div className="p-4 bg-[#0f172a] border border-[#1e293b] rounded-lg space-y-2">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-white uppercase tracking-wider flex items-center gap-1.5">
@@ -328,7 +436,7 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
           </div>
         </div>
 
-        {/* 3. AI RECOVERY DECISION & STRATEGY PANEL */}
+        {/* 4. AI RECOVERY DECISION & STRATEGY PANEL */}
         <div className="bg-[#0b0f19] border border-[#1e293b] rounded-lg p-5">
           <div className="flex items-center justify-between pb-3 border-b border-[#1e293b]">
             <div className="flex items-center gap-2">
@@ -414,11 +522,11 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
                 Guardrail & Safety Policy Check
               </span>
-              {guardrailStatus === 'ALLOWED' ? (
+              {guardrailStatus === 'ALLOWED' && !isMaxAttempts ? (
                 <span className="px-2 py-0.5 rounded text-[10px] font-bold font-mono bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
                   ✓ ALLOWED
                 </span>
-              ) : guardrailStatus === 'MANUAL_APPROVAL_REQUIRED' ? (
+              ) : guardrailStatus === 'MANUAL_APPROVAL_REQUIRED' || isNeedsReview ? (
                 <span className="px-2 py-0.5 rounded text-[10px] font-bold font-mono bg-amber-500/15 text-amber-300 border border-amber-500/30">
                   ⚠ MANUAL APPROVAL REQUIRED
                 </span>
@@ -440,11 +548,11 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
                 <span className="text-slate-500 block text-[11px]">Guardrail Decision:</span>
                 <span className="text-slate-300 text-[11px] mt-0.5 block">
                   {caseItem.guardrail?.reason ||
-                    (guardrailStatus === 'ALLOWED'
-                      ? 'Action fully permitted within risk parameters.'
+                    (isMaxAttempts
+                      ? 'Maximum retry attempts reached (2/2). Auto-execution locked.'
                       : caseItem.amount > 25000
-                      ? `Transaction volume (${formatINR(caseItem.amount)}) exceeds ₹25,000 threshold.`
-                      : 'Review required.')}
+                      ? `Transaction volume (${formatINR(caseItem.amount)}) exceeds ₹25,000 cap.`
+                      : 'Action fully permitted within risk parameters.')}
                 </span>
               </div>
             </div>
@@ -479,7 +587,7 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
           )}
         </div>
 
-        {/* 4. RECOVERY WORKFLOW TIMELINE & AUDIT TRAIL */}
+        {/* 5. RECOVERY WORKFLOW TIMELINE & AUDIT TRAIL */}
         <div className="bg-[#0b0f19] border border-[#1e293b] rounded-lg p-5">
           <div className="flex items-center justify-between pb-3 border-b border-[#1e293b] mb-4">
             <span className="text-xs font-semibold text-white uppercase tracking-wider flex items-center gap-1.5">
@@ -499,6 +607,7 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
               const isDone = item.status === 'completed';
               const isInProg = item.status === 'in_progress';
               const isBlocked = item.status === 'blocked';
+              const isFailed = item.status === 'failed';
 
               return (
                 <div key={idx} className="relative flex items-start justify-between gap-3 group">
@@ -509,12 +618,12 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
                         ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
                         : isInProg
                         ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40 animate-pulse'
-                        : isBlocked
+                        : isBlocked || isFailed
                         ? 'bg-red-500/20 text-red-400 border border-red-500/40'
                         : 'bg-[#1e293b] text-slate-500'
                     }`}
                   >
-                    {isDone ? <Check className="w-3 h-3" /> : isBlocked ? '✕' : idx + 1}
+                    {isDone ? <Check className="w-3 h-3" /> : isBlocked || isFailed ? '✕' : idx + 1}
                   </div>
 
                   {/* Content */}
@@ -526,7 +635,7 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
                             ? 'text-slate-200'
                             : isInProg
                             ? 'text-blue-300'
-                            : isBlocked
+                            : isBlocked || isFailed
                             ? 'text-red-300'
                             : 'text-slate-500'
                         }`}

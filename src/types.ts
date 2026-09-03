@@ -53,6 +53,10 @@ export interface RecoveryCase {
   retryAttempts: number;
   maxRetriesAllowed: number;
   contactCountLast7Days: number;
+  recoveredAmount?: number;
+  revenueAtRisk?: number;
+  lastAttemptAt?: string;
+  recoveredAt?: string;
   aiProbability: number; // e.g. 84.2 (%)
   confidenceLevel?: 'High' | 'Medium' | 'Low';
   recommendedAction: string; // e.g. "Create Payment Link"

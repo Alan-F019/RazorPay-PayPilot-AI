@@ -81,6 +81,9 @@ function initSchema(db: DatabaseSync) {
       timeline_json TEXT,
       created_at TEXT NOT NULL,
       recovered_at TEXT,
+      retry_attempts INTEGER DEFAULT 0,
+      recovered_amount REAL DEFAULT 0,
+      last_attempt_at TEXT,
       FOREIGN KEY (transaction_id) REFERENCES transactions(id) ON DELETE CASCADE,
       FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
     );
@@ -116,4 +119,22 @@ function initSchema(db: DatabaseSync) {
 
     CREATE INDEX IF NOT EXISTS idx_webhook_events_event_id ON webhook_events(event_id);
   `);
+
+  // Backward-compatible safe column migrations for existing databases
+  try {
+    const columns = db.prepare('PRAGMA table_info(recovery_events)').all() as { name: string }[];
+    const columnNames = new Set(columns.map((c) => c.name));
+
+    if (!columnNames.has('retry_attempts')) {
+      db.exec('ALTER TABLE recovery_events ADD COLUMN retry_attempts INTEGER DEFAULT 0;');
+    }
+    if (!columnNames.has('recovered_amount')) {
+      db.exec('ALTER TABLE recovery_events ADD COLUMN recovered_amount REAL DEFAULT 0;');
+    }
+    if (!columnNames.has('last_attempt_at')) {
+      db.exec('ALTER TABLE recovery_events ADD COLUMN last_attempt_at TEXT;');
+    }
+  } catch (err) {
+    console.error('[DB] Safe column migration check notice:', err);
+  }
 }

@@ -48,11 +48,11 @@ export class RecoveryController {
   public static executeAction(req: Request, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;
-      const { actionName } = req.body;
-      const result = RecoveryService.executeAction(id, actionName);
+      const { actionName, isManualAuth, actor } = req.body;
+      const result = RecoveryService.executeAction(id, actionName, Boolean(isManualAuth), actor);
 
       res.json({
-        success: true,
+        success: result.success,
         ...result,
         timestamp: new Date().toISOString(),
       });
