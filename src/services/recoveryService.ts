@@ -30,7 +30,7 @@ import {
   ChartDataPoint,
 } from '../data/mockData';
 
-const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:5000/api';
+const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL || '/api';
 
 /**
  * Generic API request helper with error handling & JSON extraction
@@ -364,3 +364,90 @@ export async function triggerSimulationRun(): Promise<SimulationResult> {
     casesUpdated: 17,
   };
 }
+
+/**
+ * 14. Fetch public Razorpay configuration for Checkout SDK
+ * Backend Endpoint: GET /api/razorpay/config
+ */
+export async function fetchRazorpayConfig(): Promise<{
+  keyId: string;
+  currency: string;
+  name: string;
+  description: string;
+}> {
+  const data = await apiRequest<any>('/razorpay/config');
+  return data;
+}
+
+/**
+ * 15. Create Razorpay Test Order
+ * Backend Endpoint: POST /api/razorpay/orders
+ */
+export async function createRazorpayOrder(params: {
+  amount: number; // in smallest currency unit (paise)
+  currency?: string;
+  receipt?: string;
+  notes?: Record<string, string>;
+}): Promise<{
+  id: string;
+  amount: number;
+  currency: string;
+  receipt?: string;
+  status: string;
+}> {
+  const data = await apiRequest<any>('/razorpay/orders', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+  return data.order || data;
+}
+
+/**
+ * 16. Trigger Server-Side Test Outcome Simulation
+ * Backend Endpoint: POST /api/razorpay/simulate-webhook
+ * Runs simulated webhook securely on the backend without exposing secrets.
+ */
+export async function simulateRazorpayWebhook(params: {
+  amount: number; // in rupees
+  currency?: string;
+  customerName?: string;
+  customerEmail?: string;
+  customerPhone?: string;
+  outcome: 'failed' | 'captured';
+  declineCode?: string;
+  declineReason?: string;
+  orderId?: string;
+  paymentId?: string;
+}): Promise<{
+  success: boolean;
+  simulation: boolean;
+  event: string;
+  paymentId: string;
+  orderId: string;
+  amount: number;
+  caseId?: string;
+  transactionId?: string;
+  status?: string;
+}> {
+  return await apiRequest<any>('/razorpay/simulate-webhook', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+}
+
+/**
+ * 17. Helper to dynamically load Razorpay Checkout Script if not present
+ */
+export function loadRazorpayScript(): Promise<boolean> {
+  return new Promise((resolve) => {
+    if ((window as any).Razorpay) {
+      return resolve(true);
+    }
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+}
+

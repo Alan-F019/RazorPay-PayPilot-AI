@@ -105,5 +105,15 @@ function initSchema(db: DatabaseSync) {
     );
 
     CREATE INDEX IF NOT EXISTS idx_audit_logs_case_id ON audit_logs(case_id);
+
+    CREATE TABLE IF NOT EXISTS webhook_events (
+      id TEXT PRIMARY KEY,
+      event_id TEXT UNIQUE NOT NULL,
+      event_type TEXT NOT NULL,
+      payload_json TEXT,
+      processed_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_webhook_events_event_id ON webhook_events(event_id);
   `);
 }

@@ -1,5 +1,5 @@
 import { getDatabase } from '../db/database';
-import { DashboardSummaryResponse } from '../models/types';
+import { DashboardSummaryResponse, ChartDataPointModel } from '../models/types';
 
 export class DashboardService {
   public static getSummary(period: string = '30D'): DashboardSummaryResponse {
@@ -80,34 +80,39 @@ export class DashboardService {
     };
   }
 
-  public static getTrajectory(period: string = '30D') {
-    // Generate trajectory data points
+  public static getTrajectory(period: string = '30D'): ChartDataPointModel[] {
+    // Generate trajectory data points matching frontend ChartDataPoint structure
     if (period === '7D') {
       return [
-        { date: 'Mon', atRisk: 12000, recovered: 4500, baselineLoss: 8000 },
-        { date: 'Tue', atRisk: 15400, recovered: 7200, baselineLoss: 9500 },
-        { date: 'Wed', atRisk: 9800, recovered: 4100, baselineLoss: 6200 },
-        { date: 'Thu', atRisk: 18200, recovered: 8900, baselineLoss: 11000 },
-        { date: 'Fri', atRisk: 14600, recovered: 6800, baselineLoss: 9200 },
-        { date: 'Sat', atRisk: 8400, recovered: 3900, baselineLoss: 5100 },
-        { date: 'Sun', atRisk: 11200, recovered: 5600, baselineLoss: 7400 },
+        { date: 'Aug 18', revenueAtRisk: 22400, revenueRecovered: 8400, recoveryRate: 37.5 },
+        { date: 'Aug 19', revenueAtRisk: 25100, revenueRecovered: 10200, recoveryRate: 40.6 },
+        { date: 'Aug 20', revenueAtRisk: 28900, revenueRecovered: 11400, recoveryRate: 39.4 },
+        { date: 'Aug 21', revenueAtRisk: 24200, revenueRecovered: 9800, recoveryRate: 40.5 },
+        { date: 'Aug 22', revenueAtRisk: 31000, revenueRecovered: 12100, recoveryRate: 39.0 },
+        { date: 'Aug 23', revenueAtRisk: 26500, revenueRecovered: 10800, recoveryRate: 40.7 },
+        { date: 'Aug 24', revenueAtRisk: 26400, revenueRecovered: 9700, recoveryRate: 36.7 },
       ];
     } else if (period === '90D') {
       return [
-        { date: 'Month 1', atRisk: 165000, recovered: 68000, baselineLoss: 112000 },
-        { date: 'Month 2', atRisk: 188000, recovered: 79500, baselineLoss: 124000 },
-        { date: 'Month 3', atRisk: 187200, recovered: 71000, baselineLoss: 121000 },
+        { date: 'Jun 01', revenueAtRisk: 112000, revenueRecovered: 41000, recoveryRate: 36.6 },
+        { date: 'Jun 15', revenueAtRisk: 128000, revenueRecovered: 48000, recoveryRate: 37.5 },
+        { date: 'Jul 01', revenueAtRisk: 145000, revenueRecovered: 55000, recoveryRate: 37.9 },
+        { date: 'Jul 15', revenueAtRisk: 160000, revenueRecovered: 62000, recoveryRate: 38.8 },
+        { date: 'Aug 01', revenueAtRisk: 172000, revenueRecovered: 68000, recoveryRate: 39.5 },
+        { date: 'Aug 24', revenueAtRisk: 184500, revenueRecovered: 72400, recoveryRate: 39.2 },
       ];
     }
 
     // Default 30D trajectory
     return [
-      { date: 'Aug 01', atRisk: 18000, recovered: 7200, baselineLoss: 12000 },
-      { date: 'Aug 05', atRisk: 24000, recovered: 9800, baselineLoss: 16000 },
-      { date: 'Aug 10', atRisk: 31000, recovered: 14200, baselineLoss: 21000 },
-      { date: 'Aug 15', atRisk: 42000, recovered: 19800, baselineLoss: 28000 },
-      { date: 'Aug 20', atRisk: 53000, recovered: 26400, baselineLoss: 36000 },
-      { date: 'Aug 24', atRisk: 62800, recovered: 32900, baselineLoss: 43000 },
+      { date: 'Jul 26', revenueAtRisk: 21000, revenueRecovered: 7800, recoveryRate: 37.1 },
+      { date: 'Jul 30', revenueAtRisk: 24500, revenueRecovered: 9500, recoveryRate: 38.7 },
+      { date: 'Aug 03', revenueAtRisk: 27800, revenueRecovered: 10900, recoveryRate: 39.2 },
+      { date: 'Aug 07', revenueAtRisk: 29400, revenueRecovered: 11800, recoveryRate: 40.1 },
+      { date: 'Aug 11', revenueAtRisk: 26200, revenueRecovered: 10400, recoveryRate: 39.7 },
+      { date: 'Aug 15', revenueAtRisk: 30100, revenueRecovered: 12200, recoveryRate: 40.5 },
+      { date: 'Aug 19', revenueAtRisk: 25100, revenueRecovered: 10200, recoveryRate: 40.6 },
+      { date: 'Aug 24', revenueAtRisk: 26400, revenueRecovered: 9700, recoveryRate: 36.7 },
     ];
   }
 

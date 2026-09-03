@@ -18,6 +18,7 @@ interface SidebarProps {
   onToggleTestMode: () => void;
   onOpenSettings: () => void;
   onOpenSimulation: () => void;
+  onOpenPlayground?: () => void;
   activeCaseCount: number;
 }
 
@@ -28,6 +29,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onToggleTestMode,
   onOpenSettings,
   onOpenSimulation,
+  onOpenPlayground,
   activeCaseCount,
 }) => {
   const navItems = [
@@ -147,6 +149,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Bottom Footer Section */}
       <div className="p-3 border-t border-[#1e293b] bg-[#090d16] space-y-2">
+        {/* Test Mode Playground Launcher */}
+        {onOpenPlayground && (
+          <button
+            type="button"
+            onClick={onOpenPlayground}
+            className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-md bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/25 text-amber-300 text-xs font-medium transition-colors cursor-pointer"
+          >
+            <span className="flex items-center gap-1.5 font-semibold">
+              <span>🧪</span>
+              <span>Payment Playground</span>
+            </span>
+            <span className="text-[10px] font-mono uppercase bg-amber-500/20 px-1.5 py-0.5 rounded text-amber-400">
+              Test
+            </span>
+          </button>
+        )}
+
         {/* Razorpay Test Mode Indicator / Toggle */}
         <div className="flex items-center justify-between px-2.5 py-2 rounded-md bg-[#0f172a] border border-[#1e293b]">
           <div className="flex flex-col">

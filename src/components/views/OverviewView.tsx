@@ -13,7 +13,13 @@ import {
 } from 'lucide-react';
 import { RevenueChart } from '../charts/RevenueChart';
 import { StatusBadge } from '../common/Badge';
-import { formatINR, formatPercentage } from '../../utils/formatters';
+import {
+  formatINR,
+  formatPercentage,
+  formatConfidence,
+  getConfidenceNumber,
+  normalizeFailureCategory,
+} from '../../utils/formatters';
 import { RecoveryCase, CauseBreakdown, DashboardMetrics } from '../../types';
 import { ChartDataPoint } from '../../data/mockData';
 
@@ -197,7 +203,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
 
                       <div className="flex items-center gap-3 mt-1 text-xs">
                         <span className="text-blue-400 font-mono font-medium">
-                          {c.aiProbability}% confidence
+                          {formatConfidence(c.aiProbability)} confidence
                         </span>
                         <span className="text-slate-400 truncate">
                           Action: <strong className="text-slate-200 font-medium">{c.recommendedAction}</strong>
@@ -308,18 +314,26 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                   <td className="py-3.5 px-4 font-mono font-bold text-slate-200">
                     {formatINR(c.amount)}
                   </td>
-                  <td className="py-3.5 px-4 text-slate-400 max-w-[200px] truncate">
-                    {c.failureReason}
+                  <td className="py-3.5 px-4">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-[#1e293b] text-slate-300 border border-slate-700/50">
+                      {normalizeFailureCategory(c)}
+                    </span>
                   </td>
                   <td className="py-3.5 px-4">
                     <div className="flex items-center gap-2">
                       <span className="font-mono font-semibold text-blue-400">
-                        {c.aiProbability}%
+                        {formatConfidence(c.aiProbability)}
                       </span>
                       <div className="w-12 bg-slate-800 h-1.5 rounded-full overflow-hidden">
                         <div
-                          className="h-full bg-blue-500 rounded-full"
-                          style={{ width: `${c.aiProbability}%` }}
+                          className={`h-full rounded-full ${
+                            getConfidenceNumber(c.aiProbability) >= 75
+                              ? 'bg-blue-500'
+                              : getConfidenceNumber(c.aiProbability) >= 50
+                              ? 'bg-amber-500'
+                              : 'bg-slate-500'
+                          }`}
+                          style={{ width: `${getConfidenceNumber(c.aiProbability)}%` }}
                         />
                       </div>
                     </div>

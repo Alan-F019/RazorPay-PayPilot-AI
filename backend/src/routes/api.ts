@@ -3,6 +3,8 @@ import { DashboardController } from '../controllers/dashboardController';
 import { TransactionController } from '../controllers/transactionController';
 import { RecoveryController } from '../controllers/recoveryController';
 import { CustomerController } from '../controllers/customerController';
+import { RazorpayController } from '../controllers/razorpayController';
+import { WebhookController } from '../controllers/webhookController';
 
 const router = Router();
 
@@ -39,5 +41,15 @@ router.get('/customers/:id', CustomerController.getById);
 // Audit & Governance Endpoints
 router.get('/audit-logs', RecoveryController.getAuditLogs);
 router.get('/guardrails', RecoveryController.getGuardrails);
+
+// Razorpay Test Mode Endpoints
+router.get('/razorpay/config', RazorpayController.getConfig);
+router.post('/razorpay/orders', RazorpayController.createOrder);
+router.get('/razorpay/orders/:orderId', RazorpayController.getOrder);
+router.get('/razorpay/payments/:paymentId', RazorpayController.getPayment);
+router.post('/razorpay/simulate-webhook', RazorpayController.simulateWebhook);
+
+// Razorpay Webhook Ingestion Endpoint
+router.post('/webhooks/razorpay', WebhookController.handleRazorpayWebhook);
 
 export default router;

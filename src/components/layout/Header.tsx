@@ -4,6 +4,7 @@ import {
   Zap,
   CheckCircle2,
   AlertTriangle,
+  FlaskConical,
 } from 'lucide-react';
 import { Button } from '../common/Button';
 
@@ -15,6 +16,7 @@ interface HeaderProps {
   onRefresh: () => void;
   isRefreshing: boolean;
   onOpenSimulation: () => void;
+  onOpenPlayground?: () => void;
   dateRange: '7D' | '30D' | '90D' | 'Custom';
   onSelectDateRange: (range: '7D' | '30D' | '90D' | 'Custom') => void;
 }
@@ -26,6 +28,7 @@ export const Header: React.FC<HeaderProps> = ({
   onRefresh,
   isRefreshing,
   onOpenSimulation,
+  onOpenPlayground,
   dateRange,
   onSelectDateRange,
 }) => {
@@ -79,6 +82,18 @@ export const Header: React.FC<HeaderProps> = ({
         >
           <RotateCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-blue-400' : ''}`} />
         </button>
+
+        {/* Dedicated Test Payment Playground Button */}
+        {onOpenPlayground && (
+          <button
+            type="button"
+            onClick={onOpenPlayground}
+            className="cursor-pointer gap-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 hover:text-amber-200 font-medium px-3 py-1.5 rounded-md border border-amber-500/30 text-xs shadow-xs transition-colors flex items-center"
+          >
+            <FlaskConical className="w-3.5 h-3.5 text-amber-400" />
+            <span>🧪 Test Mode Playground</span>
+          </button>
+        )}
 
         {/* Main CTA: Run Recovery Demo */}
         <Button

@@ -51,6 +51,13 @@ export interface RecoveryEventModel {
   recoveredAt?: string;
 }
 
+export interface ChartDataPointModel {
+  date: string;
+  revenueAtRisk: number;
+  revenueRecovered: number;
+  recoveryRate: number;
+}
+
 export interface DashboardSummaryResponse {
   totalRevenue: number;
   revenueRecovered: number;

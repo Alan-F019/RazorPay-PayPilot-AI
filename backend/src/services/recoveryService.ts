@@ -1,4 +1,5 @@
 import { getDatabase } from '../db/database';
+import { RecoveryDecisionEngine, GuardrailEvaluation } from './recoveryDecisionEngine';
 
 export interface RecoveryFilterParams {
   status?: string;
@@ -37,6 +38,8 @@ export class RecoveryService {
         r.customer_id as customerId,
         c.name as customerName,
         c.email as customerEmail,
+        c.tier as customerTier,
+        c.health_score as customerHealthScore,
         r.amount,
         r.reason as cause,
         r.reason as causeLabel,
@@ -83,10 +86,35 @@ export class RecoveryService {
         }
       }
       const { timelineJson, ...rest } = row;
+
+      // Evaluate live decision signals and guardrails
+      const decision = RecoveryDecisionEngine.evaluate({
+        amount: rest.amount,
+        declineCode: rest.declineCode,
+        declineReason: rest.declineReason,
+        failureReason: rest.failureReason,
+        cause: rest.cause,
+        customer: {
+          id: rest.customerId,
+          name: rest.customerName,
+          email: rest.customerEmail,
+          tier: rest.customerTier || 'Standard',
+          healthScore: rest.customerHealthScore || 'Healthy',
+        },
+        retryAttempts: rest.retryAttempts || 0,
+        status: rest.status,
+      });
+
       return {
         ...rest,
         isAutomated: Boolean(rest.isAutomated),
         timeline,
+        aiProbability: rest.aiProbability || Math.round(decision.recoveryProbability),
+        recommendedAction: rest.recommendedAction || decision.recommendedAction,
+        strategy: rest.strategy || decision.strategy,
+        reasoning: decision.reasoning,
+        guardrail: decision.guardrail,
+        confidenceLevel: decision.confidenceLevel,
       };
     });
   }
@@ -103,13 +131,94 @@ export class RecoveryService {
       throw new Error(`Recovery case #${id} not found`);
     }
 
+    // 1. Guardrail Safety Evaluation prior to execution
+    const guardrail: GuardrailEvaluation = RecoveryDecisionEngine.evaluateGuardrails(
+      existing.amount,
+      existing.retryAttempts || 0,
+      {
+        id: existing.customerId,
+        name: existing.customerName,
+        email: existing.customerEmail,
+        tier: existing.customerTier,
+        healthScore: existing.customerHealthScore,
+      },
+      existing.status,
+      existing.aiProbability
+    );
+
     const now = new Date().toISOString();
+    const timeStr = new Date().toLocaleTimeString('en-US', { hour12: false });
+    const auditId = `AUD-${Math.floor(10000 + Math.random() * 90000)}`;
+
+    if (!guardrail.allowed) {
+      // Guardrail Blocked / Manual Approval Required
+      const blockedTimelineItem = {
+        id: `t-${Date.now()}`,
+        title: `Action Blocked by Guardrail (${guardrail.policy})`,
+        description: guardrail.reason,
+        timestamp: timeStr,
+        status: 'blocked',
+      };
+
+      const updatedTimeline = [...(existing.timeline || []), blockedTimelineItem];
+      const newStatus = guardrail.status === 'MANUAL_APPROVAL_REQUIRED' ? 'needs_review' : 'escalated';
+
+      db.prepare(`
+        UPDATE recovery_events
+        SET status = ?,
+            timeline_json = ?
+        WHERE id = ?
+      `).run(newStatus, JSON.stringify(updatedTimeline), id);
+
+      db.prepare(`
+        INSERT INTO audit_logs (id, timestamp, case_id, customer_name, action, amount, trigger_event, result, policy_evaluated, blocked_reason, execution_channel, actor)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        auditId,
+        timeStr,
+        existing.id,
+        existing.customerName,
+        actionName || existing.recommendedAction || 'Execute Recovery',
+        existing.amount,
+        'API Execution Blocked',
+        'Blocked',
+        guardrail.policy,
+        guardrail.reason,
+        'Policy Engine',
+        'Automated Guardrail'
+      );
+
+      const updatedCase = this.getById(id);
+      return {
+        success: false,
+        blocked: true,
+        guardrail,
+        error: guardrail.reason,
+        updatedCase,
+        auditLog: {
+          id: auditId,
+          timestamp: timeStr,
+          caseId: existing.id,
+          customerName: existing.customerName,
+          action: actionName || existing.recommendedAction,
+          amount: existing.amount,
+          trigger: 'API Execution Blocked',
+          result: 'Blocked',
+          policyEvaluated: guardrail.policy,
+          blockedReason: guardrail.reason,
+          executionChannel: 'Policy Engine',
+          actor: 'Automated Guardrail',
+        },
+      };
+    }
+
+    // 2. Allowed - Dispatch and record action
     const paymentLink = existing.paymentLinkUrl || `https://rzp.io/i/rec_${id.toLowerCase()}`;
     const newTimelineItem = {
       id: `t-${Date.now()}`,
-      title: 'Recovery executed via Razorpay API',
+      title: 'Recovery dispatched via Razorpay API',
       description: `Action "${actionName || existing.recommendedAction}" dispatched. Payment link: ${paymentLink}`,
-      timestamp: new Date().toLocaleTimeString('en-US', { hour12: false }),
+      timestamp: timeStr,
       status: 'completed',
     };
 
@@ -139,8 +248,6 @@ export class RecoveryService {
     `).run(existing.transactionId);
 
     // Record audit log
-    const auditId = `AUD-${Math.floor(10000 + Math.random() * 90000)}`;
-    const timeStr = new Date().toLocaleTimeString('en-US', { hour12: false });
     db.prepare(`
       INSERT INTO audit_logs (id, timestamp, case_id, customer_name, action, amount, trigger_event, result, policy_evaluated, execution_channel, actor)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -153,7 +260,7 @@ export class RecoveryService {
       existing.amount,
       'API Execution',
       'Successful',
-      existing.policyApplied || 'Automated Recovery Protocol',
+      guardrail.policy,
       'Razorpay API',
       'Automated Policy Engine'
     );
@@ -162,6 +269,7 @@ export class RecoveryService {
     return {
       success: true,
       updatedCase,
+      guardrail,
       auditLog: {
         id: auditId,
         timestamp: timeStr,
@@ -171,7 +279,7 @@ export class RecoveryService {
         amount: existing.amount,
         trigger: 'API Execution',
         result: 'Successful',
-        policyEvaluated: existing.policyApplied || 'Automated Recovery Protocol',
+        policyEvaluated: guardrail.policy,
         executionChannel: 'Razorpay API',
         actor: 'Automated Policy Engine',
       },

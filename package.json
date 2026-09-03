@@ -8,6 +8,7 @@
     "dev:frontend": "vite --port=3000 --host=0.0.0.0",
     "dev:backend": "tsx watch backend/src/server.ts",
     "seed": "tsx backend/src/seed/seed.ts",
+    "test:webhook": "tsx backend/src/test/testWebhook.ts",
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js data/*.db",
@@ -22,6 +23,7 @@
     "express": "^4.21.2",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
+    "razorpay": "^2.9.8",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
     "vite": "^6.2.3"

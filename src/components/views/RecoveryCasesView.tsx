@@ -11,7 +11,12 @@ import {
   FileSpreadsheet,
 } from 'lucide-react';
 import { RecoveryCase, CaseStatus } from '../../types';
-import { formatINR } from '../../utils/formatters';
+import {
+  formatINR,
+  formatConfidence,
+  getConfidenceNumber,
+  normalizeFailureCategory,
+} from '../../utils/formatters';
 import { StatusBadge } from '../common/Badge';
 
 interface RecoveryCasesViewProps {
@@ -55,7 +60,7 @@ export const RecoveryCasesView: React.FC<RecoveryCasesViewProps> = ({
   const totalVolumeInView = filteredCases.reduce((acc, c) => acc + c.amount, 0);
   const avgConfidenceInView = filteredCases.length
     ? Math.round(
-        filteredCases.reduce((acc, c) => acc + c.aiProbability, 0) /
+        filteredCases.reduce((acc, c) => acc + getConfidenceNumber(c.aiProbability), 0) /
           filteredCases.length
       )
     : 0;
@@ -287,24 +292,26 @@ export const RecoveryCasesView: React.FC<RecoveryCasesViewProps> = ({
                     <td className="py-3.5 px-4 font-mono font-bold text-slate-200">
                       {formatINR(c.amount)}
                     </td>
-                    <td className="py-3.5 px-4 text-slate-400">
-                      {c.failureReason}
+                    <td className="py-3.5 px-4">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-[#1e293b] text-slate-300 border border-slate-700/50">
+                        {normalizeFailureCategory(c)}
+                      </span>
                     </td>
                     <td className="py-3.5 px-4">
                       <div className="flex items-center gap-2">
                         <span className="font-mono font-semibold text-blue-400">
-                          {c.aiProbability}%
+                          {formatConfidence(c.aiProbability)}
                         </span>
                         <div className="w-12 bg-slate-800 h-1.5 rounded-full overflow-hidden">
                           <div
                             className={`h-full rounded-full ${
-                              c.aiProbability >= 75
+                              getConfidenceNumber(c.aiProbability) >= 75
                                 ? 'bg-blue-500'
-                                : c.aiProbability >= 50
+                                : getConfidenceNumber(c.aiProbability) >= 50
                                 ? 'bg-amber-500'
                                 : 'bg-slate-500'
                             }`}
-                            style={{ width: `${c.aiProbability}%` }}
+                            style={{ width: `${getConfidenceNumber(c.aiProbability)}%` }}
                           />
                         </div>
                       </div>

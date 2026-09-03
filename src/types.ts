@@ -53,7 +53,8 @@ export interface RecoveryCase {
   retryAttempts: number;
   maxRetriesAllowed: number;
   contactCountLast7Days: number;
-  aiProbability: number; // e.g. 84 (%)
+  aiProbability: number; // e.g. 84.2 (%)
+  confidenceLevel?: 'High' | 'Medium' | 'Low';
   recommendedAction: string; // e.g. "Create Payment Link"
   whyExplanation: string; // e.g. "Strong customer payment history and a high-value recoverable payment failure."
   customerHistoryText: string; // e.g. "8 successful payments, 1 previous failure"
@@ -64,6 +65,14 @@ export interface RecoveryCase {
   isAutomated: boolean;
   paymentLinkUrl?: string;
   recommendedNextAction?: string;
+  reasoning?: string[];
+  guardrail?: {
+    allowed: boolean;
+    status: 'ALLOWED' | 'MANUAL_APPROVAL_REQUIRED' | 'BLOCKED';
+    policy: string;
+    reason: string;
+    action: string;
+  };
   timeline: TimelineEvent[];
 }
 

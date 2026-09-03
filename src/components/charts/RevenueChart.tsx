@@ -21,12 +21,51 @@ export const RevenueChart: React.FC<RevenueChartProps> = ({
 }) => {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
 
-  // Calculate scales and coordinates
+  // Normalize data points and calculate bounds defensively
   const { maxVal, points } = useMemo(() => {
-    if (!data.length) return { maxVal: 1, points: [] };
-    const max =
-      Math.max(...data.map((d) => Math.max(d.revenueAtRisk, d.revenueRecovered))) * 1.15;
-    return { maxVal: max, points: data };
+    if (!data || !Array.isArray(data) || data.length === 0) {
+      return { maxVal: 1, points: [] };
+    }
+
+    const normalized: ChartDataPoint[] = data.map((d, index) => {
+      const revenueAtRisk =
+        typeof d?.revenueAtRisk === 'number' && Number.isFinite(d.revenueAtRisk)
+          ? d.revenueAtRisk
+          : typeof (d as any)?.atRisk === 'number' && Number.isFinite((d as any).atRisk)
+          ? (d as any).atRisk
+          : 0;
+
+      const revenueRecovered =
+        typeof d?.revenueRecovered === 'number' && Number.isFinite(d.revenueRecovered)
+          ? d.revenueRecovered
+          : typeof (d as any)?.recovered === 'number' && Number.isFinite((d as any).recovered)
+          ? (d as any).recovered
+          : 0;
+
+      const recoveryRate =
+        typeof d?.recoveryRate === 'number' && Number.isFinite(d.recoveryRate)
+          ? d.recoveryRate
+          : revenueAtRisk > 0
+          ? Number(((revenueRecovered / revenueAtRisk) * 100).toFixed(1))
+          : 0;
+
+      return {
+        date: d?.date || `P${index + 1}`,
+        revenueAtRisk,
+        revenueRecovered,
+        recoveryRate,
+      };
+    });
+
+    const calculatedMax = Math.max(
+      1000,
+      ...normalized.map((d) => Math.max(d.revenueAtRisk, d.revenueRecovered))
+    );
+
+    return {
+      maxVal: calculatedMax * 1.15,
+      points: normalized,
+    };
   }, [data]);
 
   const height = 240;
@@ -37,12 +76,13 @@ export const RevenueChart: React.FC<RevenueChartProps> = ({
   const innerHeight = height - padding.top - padding.bottom;
 
   const getX = (index: number) => {
-    if (points.length <= 1) return padding.left;
+    if (points.length <= 1) return padding.left + innerWidth / 2;
     return padding.left + (index / (points.length - 1)) * innerWidth;
   };
 
   const getY = (val: number) => {
-    return padding.top + innerHeight - (val / maxVal) * innerHeight;
+    const safeVal = typeof val === 'number' && Number.isFinite(val) ? val : 0;
+    return padding.top + innerHeight - (safeVal / maxVal) * innerHeight;
   };
 
   // Generate SVG path commands
@@ -77,9 +117,13 @@ export const RevenueChart: React.FC<RevenueChartProps> = ({
   // Y-axis grid intervals
   const yTicks = [0, maxVal * 0.33, maxVal * 0.66, maxVal];
 
-  // Active hover point data
+  // Active hover point data (safely bounded)
   const activeDataPoint =
-    hoverIndex !== null ? points[hoverIndex] : points[points.length - 1];
+    points.length > 0
+      ? hoverIndex !== null && hoverIndex >= 0 && hoverIndex < points.length
+        ? points[hoverIndex]
+        : points[points.length - 1]
+      : null;
 
   return (
     <div className="bg-[#0b0f19] rounded-lg border border-[#1e293b] p-6 transition-all duration-200">
@@ -132,7 +176,7 @@ export const RevenueChart: React.FC<RevenueChartProps> = ({
         </div>
       </div>
 
-      {/* 4 Crucial Business Metrics Visual Strip (Communicates Impact in Seconds) */}
+      {/* 4 Crucial Business Metrics Visual Strip */}
       <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">
         {/* Metric 1: Revenue Recovered */}
         <div className="p-3 bg-[#0f172a] rounded-lg border border-emerald-500/20">
@@ -188,7 +232,7 @@ export const RevenueChart: React.FC<RevenueChartProps> = ({
           </span>
         </div>
 
-        {/* Metric 4: Affected Transactions & Customers */}
+        {/* Metric 4: Affected Volume */}
         <div className="p-3 bg-[#0f172a] rounded-lg border border-[#1e293b]">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-mono font-semibold uppercase text-slate-400">
@@ -252,6 +296,10 @@ export const RevenueChart: React.FC<RevenueChartProps> = ({
               <div className="h-full bg-blue-500 rounded-full w-2/3 animate-[pulse_1s_ease-in-out_infinite]" />
             </div>
           </div>
+        ) : points.length === 0 ? (
+          <div className="w-full h-full flex flex-col items-center justify-center bg-[#090d16]/30 rounded border border-[#1e293b] text-xs text-slate-500">
+            <span>No trajectory data recorded for this period.</span>
+          </div>
         ) : (
           <svg
             viewBox={`0 0 ${width} ${height}`}
@@ -294,7 +342,7 @@ export const RevenueChart: React.FC<RevenueChartProps> = ({
             {/* Area fill for recovered */}
             <path d={recoveredArea} fill="url(#recoveredGradient)" />
 
-            {/* Line for Revenue at Risk (dashed high-contrast border) */}
+            {/* Line for Revenue at Risk */}
             <path
               d={riskPath}
               fill="none"
@@ -304,7 +352,7 @@ export const RevenueChart: React.FC<RevenueChartProps> = ({
               strokeLinejoin="round"
             />
 
-            {/* Line for Revenue Recovered (solid bold cyan/blue line) */}
+            {/* Line for Revenue Recovered */}
             <path
               d={recoveredPath}
               fill="none"
@@ -366,9 +414,9 @@ export const RevenueChart: React.FC<RevenueChartProps> = ({
 
                   {/* Invisible hover capture rect */}
                   <rect
-                    x={x - innerWidth / (points.length * 2)}
+                    x={x - innerWidth / (Math.max(1, points.length) * 2)}
                     y={padding.top}
-                    width={innerWidth / points.length}
+                    width={innerWidth / Math.max(1, points.length)}
                     height={innerHeight + padding.bottom}
                     fill="transparent"
                     className="cursor-crosshair"

@@ -12,7 +12,12 @@ import {
   Check,
 } from 'lucide-react';
 import { RecoveryCase, PolicyGuardrails } from '../../types';
-import { formatINR } from '../../utils/formatters';
+import {
+  formatINR,
+  formatConfidence,
+  getConfidenceNumber,
+  normalizeFailureCategory,
+} from '../../utils/formatters';
 import { StatusBadge } from '../common/Badge';
 import { Button } from '../common/Button';
 
@@ -194,10 +199,10 @@ export const AIRecoveryView: React.FC<AIRecoveryViewProps> = ({
                 <div>
                   <span className="text-slate-500 block text-[11px]">Failure Diagnostic</span>
                   <span className="font-semibold text-slate-200 mt-0.5 block">
-                    {c.failureReason}
+                    {normalizeFailureCategory(c)}
                   </span>
-                  <span className="text-[11px] text-slate-400 mt-0.5 block font-mono">
-                    Category: {c.failureCategory}
+                  <span className="text-[11px] text-slate-400 mt-0.5 block font-mono truncate" title={c.failureReason || c.declineReason}>
+                    Raw: {c.failureReason || c.declineReason || 'Gateway Error'}
                   </span>
                 </div>
 
@@ -205,12 +210,12 @@ export const AIRecoveryView: React.FC<AIRecoveryViewProps> = ({
                   <span className="text-slate-500 block text-[11px]">Recovery Probability</span>
                   <div className="flex items-center gap-2 mt-0.5">
                     <span className="font-bold font-mono text-sm text-blue-400">
-                      {c.aiProbability}%
+                      {formatConfidence(c.aiProbability)}
                     </span>
                     <div className="w-16 bg-slate-800 h-1.5 rounded-full overflow-hidden">
                       <div
                         className="h-full bg-blue-500 rounded-full"
-                        style={{ width: `${c.aiProbability}%` }}
+                        style={{ width: `${getConfidenceNumber(c.aiProbability)}%` }}
                       />
                     </div>
                   </div>
@@ -225,16 +230,28 @@ export const AIRecoveryView: React.FC<AIRecoveryViewProps> = ({
                     {c.recommendedAction}
                   </span>
                   <span className="text-[11px] text-slate-400 mt-0.5 block truncate">
-                    Channel: Razorpay 1-Click Link & SMS
+                    Strategy: {c.strategy || 'Alternate Payment Method'}
                   </span>
                 </div>
               </div>
 
               {/* Rationale & Actions */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
-                <p className="text-xs text-slate-400 max-w-xl leading-relaxed">
-                  <strong className="text-slate-300">Why?</strong> {c.whyExplanation}
-                </p>
+                <div className="space-y-1 max-w-xl">
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    <strong className="text-slate-300">Why?</strong> {c.whyExplanation}
+                  </p>
+                  <div className="flex items-center gap-2 text-[11px] font-mono">
+                    <span className="text-slate-500">Guardrail:</span>
+                    {c.amount > 25000 || c.guardrail?.status === 'MANUAL_APPROVAL_REQUIRED' ? (
+                      <span className="text-amber-400 font-semibold">⚠ MANUAL APPROVAL (Cap ₹25k)</span>
+                    ) : c.guardrail?.status === 'BLOCKED' ? (
+                      <span className="text-red-400 font-semibold">✕ BLOCKED</span>
+                    ) : (
+                      <span className="text-emerald-400 font-semibold">✓ ALLOWED (Within limits)</span>
+                    )}
+                  </div>
+                </div>
 
                 <div className="flex items-center gap-2 shrink-0">
                   <button
@@ -255,6 +272,8 @@ export const AIRecoveryView: React.FC<AIRecoveryViewProps> = ({
                     className={`px-3.5 py-1.5 rounded text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5 ${
                       isExecuted
                         ? 'bg-emerald-600/30 text-emerald-300 border border-emerald-500/40'
+                        : c.amount > 25000 || c.guardrail?.status === 'MANUAL_APPROVAL_REQUIRED'
+                        ? 'bg-amber-600 hover:bg-amber-500 text-white'
                         : 'bg-blue-600 hover:bg-blue-500 text-white'
                     }`}
                   >
@@ -262,6 +281,11 @@ export const AIRecoveryView: React.FC<AIRecoveryViewProps> = ({
                       <>
                         <Check className="w-3.5 h-3.5" />
                         <span>Action Dispatched</span>
+                      </>
+                    ) : c.amount > 25000 || c.guardrail?.status === 'MANUAL_APPROVAL_REQUIRED' ? (
+                      <>
+                        <Zap className="w-3.5 h-3.5 fill-current" />
+                        <span>Authorize & Execute</span>
                       </>
                     ) : (
                       <>

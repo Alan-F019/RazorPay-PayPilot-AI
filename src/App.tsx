@@ -39,6 +39,7 @@ import { CaseDetailDrawer } from './components/views/CaseDetailDrawer';
 import { CustomerDetailDrawer } from './components/views/CustomerDetailDrawer';
 import { SimulationModal } from './components/views/SimulationModal';
 import { SettingsModal } from './components/views/SettingsModal';
+import { TestPlaygroundModal } from './components/views/TestPlaygroundModal';
 import { ToastContainer } from './components/common/ToastContainer';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 
@@ -93,6 +94,7 @@ export default function App() {
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerProfile | null>(null);
   const [isSimulationOpen, setIsSimulationOpen] = useState<boolean>(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
+  const [isPlaygroundOpen, setIsPlaygroundOpen] = useState<boolean>(false);
 
   // Toast Notification System
   const [toasts, setToasts] = useState<ToastNotification[]>([]);
@@ -361,6 +363,7 @@ export default function App() {
         onToggleTestMode={() => setIsTestMode((prev) => !prev)}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenSimulation={() => setIsSimulationOpen(true)}
+        onOpenPlayground={() => setIsPlaygroundOpen(true)}
         activeCaseCount={metrics.casesRequiringAction}
       />
 
@@ -392,6 +395,7 @@ export default function App() {
           onRefresh={handleRefresh}
           isRefreshing={isRefreshing}
           onOpenSimulation={() => setIsSimulationOpen(true)}
+          onOpenPlayground={() => setIsPlaygroundOpen(true)}
           dateRange={dateRange}
           onSelectDateRange={handleSelectDateRange}
         />
@@ -485,7 +489,29 @@ export default function App() {
         isTestMode={isTestMode}
       />
 
-      {/* 7. TOAST NOTIFICATION CONTAINER (FEEDBACK & ACTIONS) */}
+      {/* 7. RAZORPAY TEST PAYMENT PLAYGROUND MODAL */}
+      <TestPlaygroundModal
+        isOpen={isPlaygroundOpen}
+        onClose={() => setIsPlaygroundOpen(false)}
+        onPaymentProcessed={async (caseId) => {
+          await handleRefresh();
+          showToast('Payment Event Ingested', 'Razorpay webhook processed and synchronized with database.', 'success');
+        }}
+        onInspectCase={async (caseId) => {
+          setIsPlaygroundOpen(false);
+          const target = cases.find((c) => c.id === caseId);
+          if (target) {
+            setSelectedCase(target);
+          } else {
+            const refreshed = await fetchRecoveryCases();
+            setCases(refreshed);
+            const found = refreshed.find((c) => c.id === caseId);
+            if (found) setSelectedCase(found);
+          }
+        }}
+      />
+
+      {/* 8. TOAST NOTIFICATION CONTAINER (FEEDBACK & ACTIONS) */}
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
